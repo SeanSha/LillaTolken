@@ -17,7 +17,7 @@ const hasLocalCert = fs.existsSync(certFile) && fs.existsSync(keyFile);
 const useHttps = process.env.HTTPS !== 'off';
 // Vite rejects requests whose Host header it does not know (DNS-rebinding protection). IPs and
 // localhost always work; the Tailscale MagicDNS names (*.ts.net) are allowed for remote testing
-// (README 3c). Add more with ALLOWED_HOSTS=name1,name2 in the shell that starts the dev server.
+// (docs/DEVELOPER_GUIDE.md, section 3d). Add more with ALLOWED_HOSTS=name1,name2 in the shell that starts the dev server.
 const allowedHosts = ['.ts.net', ...(process.env.ALLOWED_HOSTS?.split(',').map((h) => h.trim()).filter(Boolean) ?? [])];
 const apiTarget = `http://127.0.0.1:${process.env.PORT ?? 8787}`;
 
