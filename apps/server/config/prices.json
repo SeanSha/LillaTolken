@@ -1,0 +1,53 @@
+{
+  "_comment": "Server-side price registry (docs/SYSTEM_DESIGN.md 6.4). Edit this file to change rates; it is read by the Node backend only and is never writable through the API. Rates are USD. Null/absent rate = cannot price (cost shows Unknown, never $0.00). Bump `revision` whenever you change a rate.",
+  "revision": "2026-10-18",
+  "effectiveDate": "2026-10-18",
+  "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+  "entries": [
+    {
+      "provider": "openai",
+      "model": "gpt-4.1-mini",
+      "stages": ["INTERPRET", "TRANSLATE"],
+      "billingMetric": "tokens",
+      "unit": "USD per 1M tokens (standard tier, short context)",
+      "inputPerMTok": 0.4,
+      "cachedInputPerMTok": 0.1,
+      "outputPerMTok": 1.6
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-4o-transcribe",
+      "stages": ["ASR"],
+      "billingMetric": "audio_minute",
+      "unit": "USD per audio minute (vendor 'estimated cost'; the API reports tokens but the page does not split audio/text input token rates)",
+      "perMinuteUsd": 0.006,
+      "costIsVendorEstimate": true
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-4o-mini-transcribe",
+      "stages": ["ASR"],
+      "billingMetric": "audio_minute",
+      "unit": "USD per audio minute (vendor 'estimated cost')",
+      "perMinuteUsd": 0.003,
+      "costIsVendorEstimate": true
+    },
+    {
+      "provider": "openai",
+      "model": "whisper-1",
+      "stages": ["ASR"],
+      "billingMetric": "audio_minute",
+      "unit": "USD per audio minute",
+      "perMinuteUsd": 0.006
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-4o-mini-tts",
+      "stages": ["TTS"],
+      "billingMetric": "tokens",
+      "unit": "USD per 1M tokens (text input / audio output). The non-streaming speech endpoint returns no usage, so cost is Unknown unless usage is reported.",
+      "inputPerMTok": 0.6,
+      "outputPerMTok": 12
+    }
+  ]
+}

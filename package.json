@@ -1,0 +1,43 @@
+{
+  "name": "child-translator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Child-friendly Chinese-Swedish speech translator - Minimal V1 (adult-only prototype)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm run dev -w @kt/server\" \"npm run dev -w @kt/web\"",
+    "dev:server": "npm run dev -w @kt/server",
+    "dev:web": "npm run dev -w @kt/web",
+    "start": "npm run start -w @kt/server",
+    "build": "npm run build -w @kt/web && npm run build -w @kt/server",
+    "typecheck": "tsc --noEmit -p packages/shared && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web && tsc --noEmit -p tests",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "check:cloud": "npm run check:cloud -w @kt/server",
+    "local:doctor": "npm run local:doctor -w @kt/server --silent",
+    "local:start": "npm run local:start -w @kt/server --silent",
+    "local:smoke": "npm run local:smoke -w @kt/server --silent",
+    "local:eval": "npm run local:eval -w @kt/server --silent --",
+    "local:e2e": "npm run local:e2e -w @kt/server --silent --",
+    "launcher:install": "zsh launcher/install.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "globals": "^15.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

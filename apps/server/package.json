@@ -1,0 +1,31 @@
+{
+  "name": "@kt/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc --noEmit -p .",
+    "check:cloud": "tsx scripts/check-cloud.ts",
+    "local:doctor": "tsx scripts/local-doctor.ts",
+    "local:start": "tsx scripts/local-start.ts",
+    "local:smoke": "tsx scripts/local-smoke.ts",
+    "local:eval": "tsx scripts/local-eval.ts",
+    "local:e2e": "tsx scripts/local-e2e-http.ts"
+  },
+  "dependencies": {
+    "@kt/shared": "*",
+    "dotenv": "^16.4.5",
+    "express": "^5.0.0",
+    "openai": "^5.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "tsx": "^4.19.0"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}
