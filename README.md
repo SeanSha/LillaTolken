@@ -10,14 +10,14 @@
 
 一次只做一件事。主按钮在屏幕下半部，靠图标、颜色和声音就能操作；中文和瑞典语写在一起，主要给旁边的成人看。
 
-下面是同一条示例对话里的几个画面。内容来自内置的合成例子「我想去厕所」，不是真实录音。首页现在还有拍照识字和我的词卡，这几张图只截了说话翻译。
+下面是现在的界面。说话那几张来自内置的合成例子「我想去厕所」，不是真实录音。词卡上的苹果和杯子是画来展示界面的。
 
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/screenshots/01-home.png" alt="首页：两个大按钮，说中文或说瑞典语" width="220"><br>
+      <img src="docs/screenshots/01-home.png" alt="首页：说中文、说瑞典语、拍照识字和我的词卡" width="220"><br>
       <b>选一个方向</b><br>
-      说中文，或说瑞典语
+      说中文、说瑞典语，或拍照识字
     </td>
     <td align="center" width="33%">
       <img src="docs/screenshots/02-listening.png" alt="正在听：30 秒倒计时和停止按钮" width="220"><br>
@@ -45,6 +45,28 @@
       <img src="docs/screenshots/06-result.png" alt="结果：中文意思和瑞典语句子，可以再听一遍" width="220"><br>
       <b>说给对方听</b><br>
       文字和声音一起给出
+    </td>
+  </tr>
+</table>
+
+拍照识字拍的是一个东西。认出来以后放进我的词卡，点开就能听。
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/09-preview.png" alt="拍完以后确认照片，再认一认" width="220"><br>
+      <b>认一认</b><br>
+      拍一个东西，不要拍人
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/07-cards.png" alt="我的词卡：分类和两张词卡" width="220"><br>
+      <b>我的词卡</b><br>
+      按类别排开
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/08-card.png" alt="一张词卡：苹果，中文和瑞典语可以分别播放" width="220"><br>
+      <b>点一下就听</b><br>
+      中文和瑞典语分开读
     </td>
   </tr>
 </table>

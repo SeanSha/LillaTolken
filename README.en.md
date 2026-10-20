@@ -10,14 +10,14 @@ This is an **adult feasibility prototype**. It is for trying the conversation fl
 
 One thing at a time. The main buttons sit in the lower half of the screen, and icons, color, and sound are enough to use them. Chinese and Swedish are shown together, mainly for the adult nearby.
 
-These frames are from one sample conversation. The words come from a built-in example, 「我想去厕所」, not from a real recording. The home screen now also has photo vocabulary and the card library. These frames show only the spoken translation.
+These frames are the current screens. The spoken ones use a built-in example, 「我想去厕所」, not a real recording. The apple and the cup on the cards are drawings made to show the screen.
 
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/screenshots/01-home.png" alt="Home: two large buttons, speak Chinese or speak Swedish" width="220"><br>
+      <img src="docs/screenshots/01-home.png" alt="Home: speak Chinese, speak Swedish, photo vocabulary, and my cards" width="220"><br>
       <b>Choose a direction</b><br>
-      Speak Chinese, or speak Swedish
+      Speak Chinese, speak Swedish, or take a photo
     </td>
     <td align="center" width="33%">
       <img src="docs/screenshots/02-listening.png" alt="Listening: a 30-second countdown and a stop button" width="220"><br>
@@ -45,6 +45,28 @@ These frames are from one sample conversation. The words come from a built-in ex
       <img src="docs/screenshots/06-result.png" alt="Result: the Chinese meaning and the Swedish sentence, ready to hear again" width="220"><br>
       <b>Say it aloud</b><br>
       Text and voice together
+    </td>
+  </tr>
+</table>
+
+Photo vocabulary is for an object. After it is named, it goes into the card library, and a tap plays it.
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/09-preview.png" alt="After the photo, check it and identify the object" width="220"><br>
+      <b>Name it</b><br>
+      Photograph an object, not a person
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/07-cards.png" alt="My vocabulary cards: categories and two cards" width="220"><br>
+      <b>My cards</b><br>
+      Grouped by category
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/08-card.png" alt="One card: apple, with Chinese and Swedish played separately" width="220"><br>
+      <b>Tap to hear</b><br>
+      Chinese and Swedish, separately
     </td>
   </tr>
 </table>
