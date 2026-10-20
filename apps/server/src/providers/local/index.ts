@@ -21,7 +21,7 @@ import { PROMPT_VERSION } from '../cloud/prompts';
 import { whisperModelName, type LocalConfig } from './config';
 import { runCommand, type CommandRunner } from './exec';
 import { LocalDialogueModel } from './ollama';
-import { overallStatus, probeAsr, probeLlm, probeTts, type LocalProbe } from './probe';
+import { overallStatus, probeAsr, probeLlm, probeTts, probeVision, type LocalProbe } from './probe';
 import { LocalSpeechSynthesizer } from './tts';
 import { LocalSpeechRecognizer } from './whisper';
 
@@ -44,7 +44,7 @@ export type LocalDeps = {
 };
 
 export function localModelTag(cfg: LocalConfig): string {
-  return `local:asr=whisper.cpp/${whisperModelName(cfg.whisper.modelFile)};llm=ollama/${cfg.ollama.model};tts=macos_say;prompt=${PROMPT_VERSION}`;
+  return `local:asr=whisper.cpp/${whisperModelName(cfg.whisper.modelFile)};llm=ollama/${cfg.ollama.model};vision=ollama/${cfg.ollama.visionModel};tts=macos_say;prompt=${PROMPT_VERSION}`;
 }
 
 const disabledStatus = { ok: false, code: 'LOCAL_DISABLED', detail: 'LOCAL_ENABLED=off' } as const;
@@ -71,13 +71,13 @@ export function createLocalProvider(cfg: LocalConfig, deps: LocalDeps = {}): Loc
 
   const toHealth = (): LocalHealthResponse => {
     if (!cfg.enabled) {
-      return { checkedAt: new Date(now()).toISOString(), ready: false, status: 'LOCAL_DISABLED', asr: disabledStatus, llm: disabledStatus, tts: disabledStatus, lastError };
+      return { checkedAt: new Date(now()).toISOString(), ready: false, status: 'LOCAL_DISABLED', asr: disabledStatus, llm: disabledStatus, vision: disabledStatus, tts: disabledStatus, lastError };
     }
     if (!probe) {
       const pending = { ok: false, code: 'LOCAL_NOT_CHECKED', detail: 'not probed yet' } as const;
-      return { checkedAt: new Date(now()).toISOString(), ready: false, status: 'LOCAL_NOT_CHECKED', asr: pending, llm: pending, tts: pending, lastError };
+      return { checkedAt: new Date(now()).toISOString(), ready: false, status: 'LOCAL_NOT_CHECKED', asr: pending, llm: pending, vision: pending, tts: pending, lastError };
     }
-    return { checkedAt: probe.checkedAt, ...overallStatus(probe), asr: probe.asr, llm: probe.llm, tts: probe.tts, lastError };
+    return { checkedAt: probe.checkedAt, ...overallStatus(probe), asr: probe.asr, llm: probe.llm, vision: probe.vision, tts: probe.tts, lastError };
   };
 
   /** Records the sanitized code of the last engine failure for the monitor health panel. */
@@ -109,8 +109,8 @@ export function createLocalProvider(cfg: LocalConfig, deps: LocalDeps = {}): Loc
     if (!force && probe && now() - probedAt < cfg.probeTtlMs) return toHealth();
     inflight ??= (async () => {
       try {
-        const [a, l, t] = await Promise.all([probeAsr(cfg, run, fetchImpl), probeLlm(cfg, fetchImpl), probeTts(synthesizer)]);
-        probe = { checkedAt: new Date(now()).toISOString(), asr: a, llm: l, tts: t };
+        const [a, l, v, t] = await Promise.all([probeAsr(cfg, run, fetchImpl), probeLlm(cfg, fetchImpl), probeVision(cfg, fetchImpl), probeTts(synthesizer)]);
+        probe = { checkedAt: new Date(now()).toISOString(), asr: a, llm: l, vision: v, tts: t };
         probedAt = now();
       } finally {
         inflight = null;
@@ -135,6 +135,8 @@ export function createLocalProvider(cfg: LocalConfig, deps: LocalDeps = {}): Loc
         ? `whisper.cpp:${whisperModelName(cfg.whisper.modelFile)}`
         : stage === 'TTS'
           ? 'macos_say'
-          : `ollama:${cfg.ollama.model}`,
+          : stage === 'IDENTIFY'
+            ? `ollama:${cfg.ollama.visionModel}`
+            : `ollama:${cfg.ollama.model}`,
   };
 }

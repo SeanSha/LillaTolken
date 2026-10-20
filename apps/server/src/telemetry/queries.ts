@@ -22,6 +22,8 @@ import type {
   SummaryResponse,
   TaskRow,
   TimeseriesPoint,
+  UsageBucket,
+  VocabularyUsageReport,
   YesNoNA,
 } from '@kt/shared';
 import { AI_STAGES, PROVIDER_PRESETS, REQUEST_STATUSES } from '@kt/shared';
@@ -66,6 +68,7 @@ function requestWhere(f: MonitorFilters): Where {
   if (f.model) add('r.model_tag = ?', f.model);
   if (f.status) add('r.status = ?', f.status);
   if (f.scenarioId) add('t.scenario_id = ?', f.scenarioId);
+  if (f.feature) add('r.feature = ?', f.feature);
   return { sql: parts.length ? `WHERE ${parts.join(' AND ')}` : '', params };
 }
 
@@ -84,6 +87,7 @@ function taskWhere(f: MonitorFilters): Where {
   if (f.status) add('t.status = ?', f.status);
   if (f.stage) add('EXISTS (SELECT 1 FROM ai_requests x WHERE x.task_id = t.task_id AND x.stage = ?)', f.stage);
   if (f.model) add('EXISTS (SELECT 1 FROM ai_requests x WHERE x.task_id = t.task_id AND x.model_tag = ?)', f.model);
+  if (f.feature) add('EXISTS (SELECT 1 FROM ai_requests x WHERE x.task_id = t.task_id AND x.feature = ?)', f.feature);
   return { sql: parts.length ? `WHERE ${parts.join(' AND ')}` : '', params };
 }
 
@@ -110,6 +114,9 @@ export function mapRequest(r: Row): AiRequestRow {
     preset: r.preset as ProviderPreset,
     stage: r.stage as AiStage,
     direction: (str(r.direction) ?? str(r.task_direction)) as Direction | null,
+    feature: r.feature === 'vocabulary' ? 'vocabulary' : 'translate',
+    cardId: str(r.card_id),
+    language: r.language === 'zh' || r.language === 'sv' ? r.language : null,
     providerName: r.provider_name as string,
     modelTag: r.model_tag as string,
     durationMs: r.duration_ms as number,
@@ -547,5 +554,83 @@ export function annotationStats(db: TelemetryDb, f: MonitorFilters): AnnotationS
         uiDifficultyTotal: rs.reduce((a, r) => a + r.uiDifficultyCount, 0),
       };
     }),
+  };
+}
+
+const USAGE_NOTE =
+  'Photo Vocabulary and translation are two slices of the same cloud request rows. Adding them again on top of the Cloud total would count twice. Cached audio replays are not rows. A retry is a separate API call and is counted once.';
+
+function bucket(row: Row | undefined): UsageBucket {
+  const requests = Number(row?.requests ?? 0);
+  const failed = Number(row?.failed ?? 0);
+  const duration = Number(row?.duration ?? 0);
+  return {
+    requests,
+    failed,
+    avgMs: requests > 0 ? duration / requests : null,
+    knownUsd: Number(row?.known ?? 0),
+    unknownRequests: Number(row?.unknown ?? 0),
+  };
+}
+
+const USAGE_SQL = `SELECT COUNT(*) AS requests,
+  SUM(CASE WHEN status != 'succeeded' THEN 1 ELSE 0 END) AS failed,
+  COALESCE(SUM(duration_ms), 0) AS duration,
+  COALESCE(SUM(CASE WHEN preset = 'cloud' AND cost_usd IS NOT NULL THEN cost_usd ELSE 0 END), 0) AS known,
+  SUM(CASE WHEN preset = 'cloud' AND cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown
+  FROM ai_requests WHERE feature = ?`;
+
+export function vocabularyUsage(db: TelemetryDb, f: MonitorFilters): VocabularyUsageReport {
+  const parts: string[] = [];
+  const params: SQLInputValue[] = [];
+  if (f.from) {
+    parts.push('started_at >= ?');
+    params.push(f.from);
+  }
+  if (f.to) {
+    parts.push('started_at <= ?');
+    params.push(f.to);
+  }
+  if (f.preset) {
+    parts.push('preset = ?');
+    params.push(f.preset);
+  }
+  const window = parts.length ? ` AND ${parts.join(' AND ')}` : '';
+  const one = (feature: string, extra = '') => bucket(db.get<Row>(`${USAGE_SQL}${window}${extra}`, feature, ...params));
+  const series = (fmt: string) =>
+    db
+      .all<Row>(
+        `SELECT strftime('${fmt}', started_at) AS bucket, COUNT(*) AS requests,
+           SUM(CASE WHEN status != 'succeeded' THEN 1 ELSE 0 END) AS failed,
+           COALESCE(SUM(duration_ms), 0) AS duration,
+           COALESCE(SUM(CASE WHEN preset = 'cloud' AND cost_usd IS NOT NULL THEN cost_usd ELSE 0 END), 0) AS known,
+           SUM(CASE WHEN preset = 'cloud' AND cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown
+         FROM ai_requests WHERE feature = 'vocabulary'${window}
+         GROUP BY bucket ORDER BY bucket`,
+        ...params,
+      )
+      .map((row) => ({ bucket: String(row.bucket), ...bucket(row) }));
+  const cards = db
+    .all<Row>(
+      `SELECT card_id, COUNT(*) AS requests,
+         SUM(CASE WHEN status != 'succeeded' THEN 1 ELSE 0 END) AS failed,
+         COALESCE(SUM(duration_ms), 0) AS duration,
+         COALESCE(SUM(CASE WHEN preset = 'cloud' AND cost_usd IS NOT NULL THEN cost_usd ELSE 0 END), 0) AS known,
+         SUM(CASE WHEN preset = 'cloud' AND cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown
+       FROM ai_requests WHERE feature = 'vocabulary' AND card_id IS NOT NULL${window}
+       GROUP BY card_id ORDER BY known DESC, requests DESC LIMIT 50`,
+      ...params,
+    )
+    .map((row) => ({ cardId: String(row.card_id), ...bucket(row) }));
+  return {
+    vocabulary: one('vocabulary'),
+    translation: one('translate'),
+    identify: one('vocabulary', ` AND stage = 'IDENTIFY'`),
+    ttsZh: one('vocabulary', ` AND stage = 'TTS' AND language = 'zh'`),
+    ttsSv: one('vocabulary', ` AND stage = 'TTS' AND language = 'sv'`),
+    days: series('%Y-%m-%d'),
+    months: series('%Y-%m'),
+    cards,
+    note: USAGE_NOTE,
   };
 }

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AppError, errorCodeOf, type NormalizedUsage, type RequestMeta } from '@kt/shared';
 import { cleanWhisperText } from '../../apps/server/src/providers/local/whisper';
 import { createLocalProvider, localModelTag } from '../../apps/server/src/providers/local';
+import { createLocalVocabularyIdentifier } from '../../apps/server/src/providers/local/vision';
 import { isLoopbackUrl, loadLocalConfig, whisperModelName, type LocalConfig } from '../../apps/server/src/providers/local/config';
 import { CommandError } from '../../apps/server/src/providers/local/exec';
 import { findLanExposure, lanAddresses } from '../../apps/server/src/providers/local/exposure';
@@ -46,6 +47,8 @@ describe('config + helpers', () => {
     const c = loadLocalConfig({} as NodeJS.ProcessEnv, '/repo');
     expect(c.ollama.baseUrl).toBe('http://127.0.0.1:11434');
     expect(c.ollama.model).toBe('qwen3:8b');
+    expect(c.ollama.visionModel).toBe('qwen3-vl:8b');
+    expect(c.ollama.visionTimeoutMs).toBe(120_000);
     expect(c.whisper.baseUrl).toBe('http://127.0.0.1:8080');
     expect(c.whisper.modelFile).toBe(path.join('/repo', 'models/whisper/ggml-small.bin'));
     expect(whisperModelName(c.whisper.modelFile)).toBe('small');
@@ -55,7 +58,13 @@ describe('config + helpers', () => {
     expect(o.enabled).toBe(false);
     expect(o.ollama.baseUrl).toBe('http://localhost:1');
     expect(localModelTag(c)).toContain('ollama/qwen3:8b');
+    expect(localModelTag(c)).toContain('vision=ollama/qwen3-vl:8b');
     expect(localModelTag(c)).toContain('whisper.cpp/small');
+    const vision = loadLocalConfig({ OLLAMA_VISION_MODEL: 'qwen2.5vl:7b', OLLAMA_VISION_TIMEOUT_MS: '150000' } as NodeJS.ProcessEnv, '/repo');
+    expect(vision.ollama.visionModel).toBe('qwen2.5vl:7b');
+    expect(vision.ollama.visionTimeoutMs).toBe(150_000);
+    expect(createLocalProvider(c).modelFor('IDENTIFY')).toBe('ollama:qwen3-vl:8b');
+    expect(createLocalProvider(c).modelFor('TRANSLATE')).toBe('ollama:qwen3:8b');
   });
 
   it('isLoopbackUrl accepts only loopback hosts', () => {
@@ -288,6 +297,68 @@ describe('Local LLM (Ollama)', () => {
   });
 });
 
+// ------------------------------------------------------------------ vision
+
+describe('Local vision (Ollama photo vocabulary)', () => {
+  const photo = { bytes: Uint8Array.from([9, 8, 7, 6, 5]), mimeType: 'image/jpeg' as const, kind: 'jpeg' as const };
+
+  it('posts the image only to loopback Ollama and normalises the card', async () => {
+    let sent: Record<string, unknown> = {};
+    const { impl, log } = fakeFetch({
+      chat: (body) => (
+        (sent = body),
+        ollamaChat(
+          { outcome: 'object', candidates: [{ zh: '杯子', sv: 'kopp', article: 'en', translationUncertain: false, category: 'home' }] },
+          { prompt_eval_count: 40, eval_count: 12, total_duration: 5_000_000_000, load_duration: 1_000_000_000 },
+        )
+      ),
+    });
+    const usage: NormalizedUsage[] = [];
+    const result = await createLocalVocabularyIdentifier(cfg, impl).identify(photo, undefined, (u) => usage.push(u));
+    expect(result.candidates[0]).toMatchObject({ zh: '杯子', sv: 'kopp', article: 'en', category: 'home' });
+    expect(usage[0]).toMatchObject({ promptTokens: 40, outputTokens: 12, modelLoadMs: 1000, engineInferenceMs: 4000 });
+    expect(sent.model).toBe('qwen3-vl:8b');
+    expect((sent.options as { num_ctx?: number }).num_ctx).toBeUndefined();
+    const user = (sent.messages as Array<{ role: string; images?: string[] }>).find((m) => m.role === 'user');
+    expect(user?.images).toEqual([Buffer.from(photo.bytes).toString('base64')]);
+    expect(log).toHaveLength(1);
+    expect(new URL(log[0]!.url).host).toBe('127.0.0.1:11434');
+    expect(await leftovers()).toEqual([]);
+  });
+
+  it('does not call out when local is off or Ollama is not on loopback', async () => {
+    const { impl, log } = fakeFetch({});
+    const off = await createLocalVocabularyIdentifier({ ...cfg, enabled: false }, impl).identify(photo).catch((e: unknown) => e);
+    expect(errorCodeOf(off)).toBe('LOCAL_DISABLED');
+    const lan = await createLocalVocabularyIdentifier({ ...cfg, ollama: { ...cfg.ollama, baseUrl: 'http://10.1.2.3:11434' } }, impl)
+      .identify(photo)
+      .catch((e: unknown) => e);
+    expect(errorCodeOf(lan)).toBe('LOCAL_LLM_UNAVAILABLE');
+    expect(log).toHaveLength(0);
+    expect(JSON.stringify(lan)).not.toContain(Buffer.from(photo.bytes).toString('base64'));
+  });
+
+  it('a missing vision model, bad JSON and an unreachable engine stay content-free', async () => {
+    const b64 = Buffer.from(photo.bytes).toString('base64');
+    const missing = fakeFetch({ chat: () => new Response(b64, { status: 404 }) });
+    const missingError = await createLocalVocabularyIdentifier(cfg, missing.impl).identify(photo).catch((e: unknown) => e);
+    expect(errorCodeOf(missingError)).toBe('LOCAL_LLM_MODEL_MISSING');
+    expect((missingError as AppError).message).not.toContain(b64);
+    const bad = fakeFetch({ chat: () => ollamaChat(`not json ${b64}`) });
+    const invalid = await createLocalVocabularyIdentifier(cfg, bad.impl).identify(photo).catch((e: unknown) => e);
+    expect((invalid as AppError).category).toBe('INVALID_MODEL_OUTPUT');
+    expect((invalid as AppError).message).not.toContain(b64);
+    const down = fakeFetch({
+      chat: () => {
+        throw new TypeError(`fetch failed ${b64}`);
+      },
+    });
+    const unreachable = await createLocalVocabularyIdentifier(cfg, down.impl).identify(photo).catch((e: unknown) => e);
+    expect(errorCodeOf(unreachable)).toBe('LOCAL_LLM_UNAVAILABLE');
+    expect((unreachable as AppError).message).not.toContain(b64);
+  });
+});
+
 // ------------------------------------------------------------------ TTS
 
 describe('Local TTS (macOS say)', () => {
@@ -349,6 +420,8 @@ describe('LocalProvider health + guard rails', () => {
     const health = await provider.refresh(true);
     expect(health).toMatchObject({ ready: true, status: 'LOCAL_READY' });
     expect(health.llm.modelTag).toBe('ollama:qwen3:8b');
+    expect(health.vision.ok).toBe(true);
+    expect(health.vision.modelTag).toBe('ollama:qwen3-vl:8b');
     expect(health.tts.modelTag).toBe('macos_say:zh=Tingting;sv=Alva');
     expect(log.every((l) => isLoopbackUrl(l.url) && !l.url.includes('/api/chat') && !l.url.includes('/inference'))).toBe(true);
     expect(provider.describe().available).toBe(true);
@@ -378,6 +451,8 @@ describe('LocalProvider health + guard rails', () => {
     const health = await createLocalProvider(cfg, { run, fetchImpl: impl }).refresh(true);
     expect(health.llm.ok).toBe(true);
     expect(health.llm.detail).toBe('busy');
+    expect(health.vision.ok).toBe(true);
+    expect(health.vision.detail).toBe('busy');
   });
 
   it('missing ffmpeg or a non-loopback base URL makes ASR/LLM unavailable instead of trusting the setting', async () => {
@@ -389,6 +464,8 @@ describe('LocalProvider health + guard rails', () => {
     const h = await createLocalProvider(lan, { run: fakeRunner().run, fetchImpl: impl }).refresh(true);
     expect(h.asr.detail).toMatch(/loopback/);
     expect(h.llm.detail).toMatch(/loopback/);
+    expect(h.vision.detail).toMatch(/loopback/);
+    expect(h.ready).toBe(false);
   });
 
   it('records the last engine failure code (sanitized) for the monitor, and ignores cancellations', async () => {
@@ -415,6 +492,22 @@ describe('LocalProvider health + guard rails', () => {
     expect((await off.refresh(true)).status).toBe('LOCAL_DISABLED');
     expect(log).toHaveLength(0);
     expect(calls).toHaveLength(0);
+  });
+
+  it('a missing vision model is visible, and translation stays ready', async () => {
+    const { run } = fakeRunner();
+    const { impl } = fakeFetch({ tags: () => Response.json({ models: [{ name: 'qwen3:8b' }] }) });
+    const health = await createLocalProvider(cfg, { run, fetchImpl: impl }).refresh(true);
+    expect(health.ready).toBe(true);
+    expect(health.status).toBe('LOCAL_READY');
+    expect(health.llm.ok).toBe(true);
+    expect(health.vision.ok).toBe(false);
+    expect(health.vision.code).toBe('LOCAL_LLM_MODEL_MISSING');
+    expect(health.vision.detail).toMatch(/ollama pull qwen3-vl:8b/);
+    const report = await runDoctor(cfg, { run, fetchImpl: impl, repoRoot: tmpRoot, connect: async () => false, lanAddresses: [] });
+    expect(report.engines.ready).toBe(true);
+    expect(report.steps.join('\n')).toMatch(/ollama pull qwen3-vl:8b/);
+    expect(report.steps.join('\n')).toMatch(/Photo vocabulary still needs the vision model/);
   });
 
   it('reuses a probe result for the TTL (cheap /api/health polling) and re-probes when forced', async () => {
@@ -467,8 +560,11 @@ describe('local:doctor', () => {
 
   it('recommends models from the real RAM size', () => {
     expect(recommendModels(8).llm).toBe('qwen3:4b');
+    expect(recommendModels(8).vision).toBe('qwen3-vl:4b');
     expect(recommendModels(16).llm).toBe('qwen3:8b');
+    expect(recommendModels(16).vision).toBe('qwen3-vl:8b');
     expect(recommendModels(32).llm).toBe('qwen3:8b');
+    expect(recommendModels(32).vision).toBe('qwen3-vl:8b');
     expect(recommendModels(32).asr).toMatch(/large-v3-turbo/);
   });
 });

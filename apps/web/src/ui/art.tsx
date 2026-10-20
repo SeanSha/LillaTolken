@@ -1,7 +1,7 @@
 // Vector art from the approved Figma Make design (design/figma-make): the mascot and the line icons.
 // Pure presentation; no behaviour lives here.
 
-export type IconName = 'mic' | 'stop' | 'sound' | 'plus' | 'replay' | 'retry';
+export type IconName = 'mic' | 'stop' | 'sound' | 'plus' | 'replay' | 'retry' | 'camera' | 'cards';
 
 const ICON_PATHS: Record<IconName, React.ReactNode> = {
   mic: (
@@ -30,10 +30,22 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
       <path d="M20 4v5h-5" />
     </>
   ),
+  camera: (
+    <>
+      <path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
+      <circle cx="12" cy="13" r="3" />
+    </>
+  ),
+  cards: (
+    <>
+      <rect x="6" y="7" width="14" height="12" rx="2" />
+      <path d="M4 5h12" />
+    </>
+  ),
 };
 
 /** Open-path icons are drawn as strokes only (filling an open path produces a blob). */
-const OUTLINE = new Set<IconName>(['plus', 'replay', 'retry']);
+const OUTLINE = new Set<IconName>(['plus', 'replay', 'retry', 'camera', 'cards']);
 
 export function Icon({ name }: { name: IconName }) {
   return (

@@ -43,6 +43,9 @@ export type RequestMeta = {
    */
   sessionId?: string;
   direction?: Direction;
+  /** Set by the vocabulary client. Absent on the translator, which stays `translate`. */
+  feature?: 'translate' | 'vocabulary';
+  cardId?: string;
   report?: (usage: NormalizedUsage) => void;
 };
 

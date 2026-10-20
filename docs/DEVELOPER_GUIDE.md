@@ -105,7 +105,7 @@ iPhone Safari 只在**安全上下文(HTTPS)**里开放麦克风。
 
 ## 3a. 本地模式(Mac 上的 ASR + LLM + TTS)
 
-`local` 预设**完全在这台 Mac 上运行**:whisper.cpp(识别) + Ollama(理解/翻译) + macOS `say`(语音)。它**不会调用任何付费云服务,失败时也绝不会悄悄回退到 Cloud**——引擎不可用就明确报 `LOCAL_*` 错误。
+`local` 预设**完全在这台 Mac 上运行**:whisper.cpp(识别) + Ollama(理解/翻译) + macOS `say`(语音)。拍照识字用另一个 Ollama 视觉模型,词卡朗读也走 `say`。它**不会调用任何付费云服务,失败时也绝不会悄悄回退到 Cloud**——引擎不可用就明确报 `LOCAL_*` 错误。
 
 ### 安装(只需一次)
 
@@ -113,6 +113,7 @@ iPhone Safari 只在**安全上下文(HTTPS)**里开放麦克风。
 brew install ollama whisper-cpp ffmpeg
 ollama serve &                       # 或启动 Ollama 桌面 App
 ollama pull qwen3:8b                 # 理解 + 翻译(默认)
+ollama pull qwen3-vl:8b              # 拍照识字。qwen3 文字模型不能看图;内存紧可以用 qwen3-vl:4b,并用 OLLAMA_VISION_MODEL 换掉默认值
 mkdir -p models/whisper
 curl -L -o models/whisper/ggml-small.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
@@ -219,6 +220,43 @@ npm run launcher:install      # 在桌面生成 "小翻译 启动.app"、"小翻
 - 通过 Tailscale Serve 访问时,后端看到的来源地址是 127.0.0.1,所以 `MONITOR_LOCAL_ONLY` **无法**区分手机与 Mac;`/monitor` 仅靠管理员密码保护——请使用强密码。
 - 手机流量下 Local 的延迟主要是上传录音 + 返回语音,通常比 Wi-Fi 多几百毫秒。
 - **这一节我没有在真机上验证**(这台 Mac 上没有安装 Tailscale)。第 3 步的命令请以你安装的版本的帮助为准。
+
+## 3e. 拍照识字词卡
+
+首页在原来的两个翻译方向下面,增加 **拍照识字** 和 **我的词卡**。这条功能和对话状态机分开:不录音、不写评估事件、也不把照片存到服务器。
+
+识别走 `POST /api/vocabulary/identify`。请求带上当前预设:`local` 用本机 Ollama 视觉模型(默认 `qwen3-vl:8b`,照片只留在这一次请求里,失败不会改走云端);`cloud` 和 `mock` 用 OpenAI Responses API(`store: false`)。朗读复用已有的 `POST /api/tts`,并带上 `zh` 或 `sv`,所以瑞典语会读出 `en`/`ett`。`local` 的朗读是 macOS `say`;另外两种预设仍用云端语音。云端密钥仍只在后端的 `OPENAI_API_KEY`。可选:
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `OLLAMA_VISION_MODEL` | `qwen3-vl:8b` | 本地识图。必须是已经 `ollama pull` 的视觉模型。超时默认 120 秒 |
+| `OPENAI_VISION_MODEL` | `gpt-4.1-mini` | 云端识图,必须支持图像输入。识别超时至少 45 秒,不受更短的 `OPENAI_TIMEOUT_MS` 影响 |
+| `VOCABULARY_DB_PATH` | `apps/server/data/vocabulary.sqlite` | 家庭词库的词语和文件路径。不要和监控库混用 |
+| `VOCABULARY_MEDIA_DIR` | `apps/server/data/vocabulary-media` | 照片和朗读文件。数据库里不放图片字节 |
+
+识别本身不保存照片。词卡先写在这台设备的 IndexedDB(`kt-vocabulary`)里。清除 Safari 网站数据会删掉这一份。
+
+孩子看到的词卡页只有分类图标和照片格子。配对、同步、搜索、日期和删除在家长页:按住标题旁的小圆点大约两秒。家庭口令只出现在这一页,至少 8 个字符。另一台设备用同一个口令加入,看到的是同一份。这个口令不是 `/monitor` 的管理密码,也不是打开家长页的方法。同步不会自动删除本机卡片。没网时仍然打开本机的卡片。
+
+新拍的卡片会在同一次识别里带上分类(动物、食物和饮料、玩具、衣服、家居、学校、自然、交通工具、其他)。认不准时记为其他。已经手动改过的分类不会被自动盖掉。旧卡片里能对上常见词的,会在打开词库时归类;其余可以在家长页里选择再识别,费用和再拍一张相近,记在监控的 Photo Vocabulary。
+
+监控页 Cost 里的 Photo Vocabulary 和 Translation 是同一批请求的两半,不要再加一遍。识别只记录接口返回的 token。朗读如果接口没有返回用量,费用保持 Unknown。缓存的重播不会再记一条。
+
+**iPhone Safari 手测:**
+
+1. Mac 与 iPhone 同一 Wi-Fi,`npm run dev`,用第 3 节的 HTTPS 地址打开。
+2. 首页仍能进入中文→瑞典语和瑞典语→中文;中途点左上角 ← 可回到翻译首页。
+3. 点 **拍照识字**。应直接打开后置相机(`capture="environment"`),而不是先进入带「拍照 / 从相册选」的菜单。拍一个物品(杯子、苹果),不要拍人。
+4. 看到预览后点 **认一认**。成功时出现中文、瑞典语(有冠词时是 `en`/`ett`)和两个分开的播放按钮。声音只在点击后播放。
+5. 再点一次播放,不应再次长时间等待(音频已缓存在这张卡片上)。
+6. 保存后进入整页学习:大图、中文、瑞典语,以及 **中文** / **Svenska** 两个播放按钮。左右箭头或横滑可换卡,左上角 ← 回到格子。格子大约一行两张。分类是大按钮,不需要打字。刷新后本机卡片还在。
+7. 同一张照片再保存一次,应打开已有卡片,而不是新建一张。
+8. 拍一张人脸或全身照,应要求换一张,并且不出现人名。
+9. 拍完后的预览页可以点 **从相册选**,作为相机不可用时的后备。选一张 JPEG/PNG/HEIC。
+10. 按住标题旁的小圆点约两秒,打开家长页。在那里输入家庭口令并点 **同步本机**。另一台用同一个口令,应看到同一张卡。搜索、日期、改词、改分类和删除也在这一页。删除前要确认。短按小圆点不会打开。断网时仍能打开还没同步的本机卡片。
+11. 在 iPhone 上清除该网站数据后,本机词卡消失。已经同步到 Mac 的那一份还在,除非在家长页删掉。
+
+**桌面浏览器手测:** 打开 **我的词卡** 时页面变宽,格子能多列。拍照那一页仍保持手机宽度。长单词换行,按钮不盖住照片。这一节的真机 iPhone 需要你自己按上面的清单看;桌面宽度用浏览器缩放即可。
 
 ## 4. Mock 场景(⚙ → Mock scenario)
 

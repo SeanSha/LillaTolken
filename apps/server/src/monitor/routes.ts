@@ -44,6 +44,7 @@ const FiltersSchema = z.object({
   preset: PresetSchema.optional(),
   direction: DirectionSchema.optional(),
   stage: z.enum(AI_STAGES).optional(),
+  feature: z.enum(['translate', 'vocabulary']).optional(),
   model: z.string().max(200).optional(),
   status: z.string().max(20).optional(),
   scenarioId: z.string().max(100).optional(),
@@ -176,6 +177,10 @@ export function createMonitorRouter(deps: MonitorDeps): Router {
 
   router.get('/api/monitor/summary', (req, res) => {
     res.json(q.summary(db, parseFilters(req)));
+  });
+
+  router.get('/api/monitor/vocabulary-usage', (req, res) => {
+    res.json(q.vocabularyUsage(db, parseFilters(req)));
   });
 
   router.get('/api/monitor/requests', (req, res) => {

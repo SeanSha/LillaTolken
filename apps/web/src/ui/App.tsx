@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { VocabularyShell } from '../vocabulary/VocabularyShell';
+import { fileInputProps } from '../vocabulary/capture';
 import { useActor } from '@xstate/react';
 import { otherDirection } from '@kt/shared';
 import { dialogueMachine, logger, mockScript, refreshHealth } from '../services/runtime';
@@ -24,6 +26,11 @@ export function App() {
   const [presetAtStart] = useState(startingPreset);
   const [snap, send] = useActor(dialogueMachine, { input: { preset: presetAtStart } });
   // A cloud bookmark still needs the adult confirmation the first time; open settings so that box is visible.
+  const [feature, setFeature] = useState<null | 'photo' | 'library'>(null);
+  const [openingFile, setOpeningFile] = useState<File | null>(null);
+  const [photoKey, setPhotoKey] = useState(0);
+  const homeCameraRef = useRef<HTMLInputElement>(null);
+  const homeCamera = fileInputProps('camera');
   const [devOpen, setDevOpen] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get('preset');
     return requested === 'cloud' && !settings.get().cloudAcknowledged;
@@ -48,11 +55,26 @@ export function App() {
   const props = { snap, send };
 
   return (
-    <div className={`app screen-${screen}`}>
+    <div className={`app screen-${screen}${feature === 'library' ? ' vocab-wide' : ''}`}>
       <header className="topbar">
-        <button type="button" className={`top-action${showTaskControls ? '' : ' is-hidden'}`} data-testid="cancel" aria-label="Cancel" tabIndex={showTaskControls ? 0 : -1} onClick={() => send({ type: 'CANCEL' })}>
-          ×
-        </button>
+        {feature ? (
+          <button
+            type="button"
+            className="top-action"
+            data-testid="vocab-home"
+            aria-label="Back to translator"
+            onClick={() => {
+              setOpeningFile(null);
+              setFeature(null);
+            }}
+          >
+            ←
+          </button>
+        ) : (
+          <button type="button" className={`top-action${showTaskControls ? '' : ' is-hidden'}`} data-testid="cancel" aria-label="Cancel" tabIndex={showTaskControls ? 0 : -1} onClick={() => send({ type: 'CANCEL' })}>
+            ×
+          </button>
+        )}
 
         <div className="route" aria-live="polite">
           {task ? <span data-testid="direction-badge">{directionFlags(task.direction)}</span> : null}
@@ -77,7 +99,7 @@ export function App() {
       </header>
 
       <main className="main" data-state={JSON.stringify(snap.value)}>
-        {screen === 'home' && <HomeScreen {...props} />}
+        {screen === 'home' && !feature && <HomeScreen {...props} onPhotoCards={() => homeCameraRef.current?.click()} onMyCards={() => setFeature('library')} />}
         {screen === 'recording' && <RecordingScreen {...props} />}
         {screen === 'segmentDecision' && <SegmentDecisionScreen {...props} />}
         {screen === 'busy' && <BusyScreen {...props} />}
@@ -87,11 +109,28 @@ export function App() {
         {screen === 'switch' && <SwitchScreen {...props} />}
         {screen === 'error' && <ErrorScreen {...props} />}
         {screen === 'fallback' && <FallbackScreen {...props} />}
-        {screen === 'asrEmpty' && <AsrEmptyScreen {...props} />}
+        {screen === 'asrEmpty' && !feature && <AsrEmptyScreen {...props} />}
+        {feature && <VocabularyShell key={feature === 'photo' ? `photo-${photoKey}` : feature} entry={feature} openingFile={feature === 'photo' ? openingFile : null} preset={snap.context.preset} />}
         {/* Inside the scroll area: adults can scroll down to it, and it never steals height from the child's buttons. */}
-        <AdultInfo snap={snap} screen={screen} />
+        {!feature && <AdultInfo snap={snap} screen={screen} />}
       </main>
 
+      <input
+        ref={homeCameraRef}
+        type="file"
+        accept={homeCamera.accept}
+        capture={homeCamera.capture}
+        hidden
+        data-testid="home-vocab-camera"
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
+          event.target.value = '';
+          if (!file) return;
+          setOpeningFile(file);
+          setPhotoKey((value) => value + 1);
+          setFeature('photo');
+        }}
+      />
       {devOpen && <DevPanel snap={snap} send={send} onClose={() => setDevOpen(false)} />}
     </div>
   );

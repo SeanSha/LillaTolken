@@ -5,3 +5,4 @@ export * from './schemas';
 export * from './evaluation';
 export * from './mockScenarios';
 export * from './monitor';
+export * from './vocabulary';

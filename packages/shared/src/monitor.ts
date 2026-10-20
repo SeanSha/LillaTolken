@@ -2,8 +2,11 @@
 // METADATA ONLY: none of these shapes can carry audio, transcripts, prompts or translations.
 import type { Direction, ProviderPreset } from './types';
 
-export const AI_STAGES = ['ASR', 'INTERPRET', 'TRANSLATE', 'TTS'] as const;
+export const AI_STAGES = ['ASR', 'INTERPRET', 'TRANSLATE', 'TTS', 'IDENTIFY'] as const;
 export type AiStage = (typeof AI_STAGES)[number];
+
+export const AI_FEATURES = ['translate', 'vocabulary'] as const;
+export type AiFeature = (typeof AI_FEATURES)[number];
 
 export const REQUEST_STATUSES = ['succeeded', 'failed', 'cancelled', 'timeout'] as const;
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
@@ -27,6 +30,12 @@ export type AiRequestRow = {
   preset: ProviderPreset;
   stage: AiStage;
   direction: Direction | null;
+  /** Which product made the call. Rows written before this column existed are `translate`. */
+  feature: AiFeature;
+  /** Vocabulary card id when this call belongs to one card. Never a word or image. */
+  cardId: string | null;
+  /** TTS language when the call is speech. Null for other stages. */
+  language: 'zh' | 'sv' | null;
   providerName: string;
   modelTag: string;
   durationMs: number;
@@ -116,6 +125,7 @@ export type MonitorFilters = {
   model?: string;
   status?: string;
   scenarioId?: string;
+  feature?: AiFeature;
 };
 
 export type LatencyStats = { count: number; avgMs: number | null; medianMs: number | null; p95Ms: number | null };
@@ -246,8 +256,31 @@ export type LocalHealthResponse = {
   status: string;
   asr: EngineStatus;
   llm: EngineStatus;
+  /** Photo vocabulary. Missing here does not clear `ready` for translation. */
+  vision: EngineStatus;
   tts: EngineStatus;
   lastError: { code: string; at: string } | null;
+};
+
+export type UsageBucket = {
+  requests: number;
+  failed: number;
+  avgMs: number | null;
+  knownUsd: number;
+  unknownRequests: number;
+};
+
+/** Breakdown of cloud spend. The two features partition the same rows; they are not an extra total. */
+export type VocabularyUsageReport = {
+  vocabulary: UsageBucket;
+  translation: UsageBucket;
+  identify: UsageBucket;
+  ttsZh: UsageBucket;
+  ttsSv: UsageBucket;
+  days: Array<UsageBucket & { bucket: string }>;
+  months: Array<UsageBucket & { bucket: string }>;
+  cards: Array<UsageBucket & { cardId: string }>;
+  note: string;
 };
 
 export type CloudHealth = { configured: boolean; modelTag: string };

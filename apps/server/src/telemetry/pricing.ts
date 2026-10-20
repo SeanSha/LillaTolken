@@ -11,7 +11,7 @@ const num = z.number().finite().min(0);
 const EntrySchema = z.object({
   provider: z.string(),
   model: z.string(),
-  stages: z.array(z.enum(['ASR', 'INTERPRET', 'TRANSLATE', 'TTS'])).min(1),
+  stages: z.array(z.enum(['ASR', 'INTERPRET', 'TRANSLATE', 'TTS', 'IDENTIFY'])).min(1),
   billingMetric: z.enum(['tokens', 'audio_minute']),
   unit: z.string(),
   inputPerMTok: num.nullish(),

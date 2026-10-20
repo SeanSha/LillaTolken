@@ -10,7 +10,7 @@ This is an **adult feasibility prototype**. It is for trying the conversation fl
 
 One thing at a time. The main buttons sit in the lower half of the screen, and icons, color, and sound are enough to use them. Chinese and Swedish are shown together, mainly for the adult nearby.
 
-These frames are from one sample conversation. The words come from a built-in example, 「我想去厕所」, not from a real recording.
+These frames are from one sample conversation. The words come from a built-in example, 「我想去厕所」, not from a real recording. The home screen now also has photo vocabulary and the card library. These frames show only the spoken translation.
 
 <table>
   <tr>
@@ -79,6 +79,14 @@ flowchart LR
 
 If something was said wrong, not heard, or the direction should change, the turn can stop and start again. The translation can be replayed, or spoken once more in the same direction.
 
+## Photo vocabulary
+
+The home screen also has **Photo Vocabulary** and **My Vocabulary Cards**. Photo Vocabulary opens the camera directly. Photograph an object, not a person. The result is a card with Chinese and Swedish, and a tap plays either one. Cards are grouped into categories such as animals, food, and toys.
+
+A card is stored on this device first. To show the same library on another device in the household, press and hold **家长** on the card page for about two seconds, then pair with a household passphrase of at least 8 characters. That passphrase is not the monitoring password. Deleting a card asks for confirmation first.
+
+In the on-Mac mode, identifying the photo also stays on this computer. Cloud mode and Try it send that one photo to a cloud service, only to name the object. Do not photograph a face or personal information.
+
 ## Three ways to run it, one interface
 
 | | What it is for | Where the audio goes |
@@ -96,7 +104,8 @@ Setup, phone access, the on-Mac engines, and the monitoring panel are in the [de
 - A child does not need to read. Large buttons and sound are enough.
 - Chinese is translated into Swedish only after the meaning is confirmed, so an unclear phrase is not spoken out.
 - If it still is not clear, the turn stops instead of asking question after question.
-- Records kept for review store only things like timing and success. They do not store audio, what was said, or the translation.
+- Records kept for review store only things like timing and success. They do not store audio, what was said, or the translation. A vocabulary card does keep its photo and the two words. That is separate from the monitoring record.
+- A photo is only for an object. A face or a full-body picture does not become a card, and no personal name is written.
 
 ## Read on
 

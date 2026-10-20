@@ -16,6 +16,7 @@ export function createRegistry(config: ServerConfig, overrides: Partial<Provider
     INTERPRET: config.openai.llmModel,
     TRANSLATE: config.openai.llmModel,
     TTS: config.openai.ttsModel,
+    IDENTIFY: config.openai.visionModel,
   };
   // Availability of `local` is a live view of the last engine probe (engines can be started later).
   let localInfo = local.describe();

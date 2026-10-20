@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { BudgetSettings } from '@kt/shared';
-import { monitorApi } from './api';
+import type { BudgetSettings, VocabularyUsageReport } from '@kt/shared';
+import { monitorApi, type MonitorApiError } from './api';
 import { useMonitor } from './context';
 import { fmtInt, fmtMin, fmtUsd } from './format';
 import { usePolled } from './hooks';
@@ -9,11 +9,12 @@ import { Card, ErrorNote } from './parts';
 export function CostTab() {
   const { resolve, key, intervalMs, onAuthError } = useMonitor();
   const summary = usePolled(() => monitorApi.summary(resolve()), [key], intervalMs);
+  const vocabulary = usePolled(() => monitorApi.vocabularyUsage(resolve()), [key], intervalMs);
   const pricing = usePolled(() => monitorApi.pricing(), [], null);
   const settings = usePolled(() => monitorApi.settings(), [], null);
   useEffect(() => {
-    if ([summary.error, pricing.error, settings.error].some((e) => e?.status === 401)) onAuthError();
-  }, [summary.error, pricing.error, settings.error, onAuthError]);
+    if ([summary.error, vocabulary.error, pricing.error, settings.error].some((e) => e?.status === 401)) onAuthError();
+  }, [summary.error, vocabulary.error, pricing.error, settings.error, onAuthError]);
 
   const s = summary.data;
   const cost = s?.cost;
@@ -36,6 +37,8 @@ export function CostTab() {
       <p className="mon-note">
         This is an attribution estimate based on the server-side price registry (not an invoice, no billing API is used). Cloud TTS is currently Unknown because the non-streaming speech endpoint reports no usage.
       </p>
+
+      <VocabularyCost report={vocabulary.data} error={vocabulary.error} />
 
       <h3>By model</h3>
       <div className="mon-scroll">
@@ -120,6 +123,78 @@ export function CostTab() {
       {settings.data && <BudgetForm initial={settings.data.budget} status={s?.budget} onSaved={() => summary.refresh()} />}
       <DataControls />
     </div>
+  );
+}
+
+function bucketLine(label: string, bucket: VocabularyUsageReport['vocabulary'] | undefined) {
+  if (!bucket) return null;
+  const priced = bucket.requests - bucket.unknownRequests;
+  return (
+    <tr>
+      <td>{label}</td>
+      <td>{bucket.requests}</td>
+      <td>{bucket.failed}</td>
+      <td>{bucket.avgMs === null ? '—' : Math.round(bucket.avgMs)}</td>
+      <td>{bucket.requests === 0 ? '—' : priced === 0 ? 'Unknown' : fmtUsd(bucket.knownUsd)}</td>
+      <td>{bucket.unknownRequests}</td>
+    </tr>
+  );
+}
+
+function VocabularyCost({ report, error }: { report: VocabularyUsageReport | null; error: MonitorApiError | null }) {
+  return (
+    <section data-testid="vocab-cost">
+      <h3>Photo Vocabulary vs translation</h3>
+      <ErrorNote error={error} />
+      <p className="mon-note">{report?.note ?? 'Loading the vocabulary breakdown…'}</p>
+      <div className="mon-scroll">
+        <table className="mon-table" data-testid="vocab-cost-table">
+          <thead>
+            <tr>
+              <th>Slice</th>
+              <th>Requests</th>
+              <th>Failed</th>
+              <th>Avg ms</th>
+              <th>Known USD</th>
+              <th>Unpriced</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bucketLine('Photo Vocabulary', report?.vocabulary)}
+            {bucketLine('Translation', report?.translation)}
+            {bucketLine('Identify', report?.identify)}
+            {bucketLine('Chinese speech', report?.ttsZh)}
+            {bucketLine('Swedish speech', report?.ttsSv)}
+          </tbody>
+        </table>
+      </div>
+      {(report?.cards.length ?? 0) > 0 && (
+        <>
+          <h3>Per card</h3>
+          <p className="mon-note">Card ids only. Words and photos stay out of this database.</p>
+          <table className="mon-table small">
+            <thead>
+              <tr>
+                <th>Card</th>
+                <th>Requests</th>
+                <th>Known USD</th>
+                <th>Unpriced</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report?.cards.map((card) => (
+                <tr key={card.cardId}>
+                  <td className="mono">{card.cardId}</td>
+                  <td>{card.requests}</td>
+                  <td>{card.requests - card.unknownRequests === 0 ? 'Unknown' : fmtUsd(card.knownUsd)}</td>
+                  <td>{card.unknownRequests}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </section>
   );
 }
 

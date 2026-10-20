@@ -1,15 +1,15 @@
 {
   "_comment": "Server-side price registry (docs/SYSTEM_DESIGN.md 6.4). Edit this file to change rates; it is read by the Node backend only and is never writable through the API. Rates are USD. Null/absent rate = cannot price (cost shows Unknown, never $0.00). Bump `revision` whenever you change a rate.",
-  "revision": "2026-10-18",
-  "effectiveDate": "2026-10-18",
+  "revision": "2026-10-20",
+  "effectiveDate": "2026-10-20",
   "sourceUrl": "https://developers.openai.com/api/docs/pricing",
   "entries": [
     {
       "provider": "openai",
       "model": "gpt-4.1-mini",
-      "stages": ["INTERPRET", "TRANSLATE"],
+      "stages": ["INTERPRET", "TRANSLATE", "IDENTIFY"],
       "billingMetric": "tokens",
-      "unit": "USD per 1M tokens (standard tier, short context)",
+      "unit": "USD per 1M tokens (standard tier, short context). IDENTIFY uses these same rates on the token counts the API returns. Image tokens are included only when the provider folds them into input_tokens; this file does not add a separate image price.",
       "inputPerMTok": 0.4,
       "cachedInputPerMTok": 0.1,
       "outputPerMTok": 1.6

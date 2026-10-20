@@ -42,7 +42,7 @@ function ProgressDots({ done, recording }: { done: number; recording: boolean })
 }
 
 // ---------------------------------------------------------------- Home
-export function HomeScreen({ snap, send }: ScreenProps) {
+export function HomeScreen({ snap, send, onPhotoCards, onMyCards }: ScreenProps & { onPhotoCards: () => void; onMyCards: () => void }) {
   const settings = useSettings();
   const preset = snap.context.preset;
   const env = inspectMicEnvironment();
@@ -76,6 +76,18 @@ export function HomeScreen({ snap, send }: ScreenProps) {
           </span>
           <small>Prata svenska</small>
         </BigButton>
+        <div className="vocab-home-row">
+          <BigButton testId="start-photo-vocab" tone="purple" className="vocab-entry" label="Photo Vocabulary" onClick={onPhotoCards}>
+            <Icon name="camera" />
+            <span className="action-label">拍照识字</span>
+            <small>Photo Vocabulary</small>
+          </BigButton>
+          <BigButton testId="open-vocab-library" tone="orange" className="vocab-entry" label="My Vocabulary Cards" onClick={onMyCards}>
+            <Icon name="cards" />
+            <span className="action-label">我的词卡</span>
+            <small>My Vocabulary Cards</small>
+          </BigButton>
+        </div>
       </div>
       {needsRealMic && !env.secureContext && (
         <p className="warn" role="alert">

@@ -7,7 +7,7 @@ import { fmtInt, fmtMin, fmtMs, fmtPct, fmtUsd } from './format';
 import { usePolled } from './hooks';
 import { ErrorNote, Card } from './parts';
 
-const STAGE_COLORS: Record<AiStage, string> = { ASR: '#4c8bf5', INTERPRET: '#f59e0b', TRANSLATE: '#10b981', TTS: '#a855f7' };
+const STAGE_COLORS: Record<AiStage, string> = { ASR: '#4c8bf5', INTERPRET: '#f59e0b', TRANSLATE: '#10b981', TTS: '#a855f7', IDENTIFY: '#ed625f' };
 
 export function OverviewTab() {
   const { resolve, key, intervalMs, onAuthError } = useMonitor();
@@ -195,6 +195,7 @@ function HealthPanel({ health, error }: { health: MonitorHealthResponse | null; 
             <ul>
               {engine('ASR', health.local.asr)}
               {engine('LLM', health.local.llm)}
+              {engine('Vision', health.local.vision)}
               {engine('TTS', health.local.tts)}
             </ul>
             {health.local.lastError && (

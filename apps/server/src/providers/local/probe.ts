@@ -6,7 +6,7 @@ import { CommandError, type CommandRunner } from './exec';
 import { isLoopbackUrl, whisperModelName, type LocalConfig } from './config';
 import type { LocalSpeechSynthesizer } from './tts';
 
-export type LocalProbe = { checkedAt: string; asr: EngineStatus; llm: EngineStatus; tts: EngineStatus };
+export type LocalProbe = { checkedAt: string; asr: EngineStatus; llm: EngineStatus; vision: EngineStatus; tts: EngineStatus };
 
 const PROBE_TIMEOUT_MS = 1500;
 
@@ -43,8 +43,8 @@ export async function probeAsr(cfg: LocalConfig, run: CommandRunner, fetchImpl: 
   return { ok: true, modelTag, detail: res === 'busy' ? 'busy (inference in progress)' : undefined };
 }
 
-export async function probeLlm(cfg: LocalConfig, fetchImpl: typeof fetch): Promise<EngineStatus> {
-  const modelTag = `ollama:${cfg.ollama.model}`;
+async function probeOllamaModel(cfg: LocalConfig, fetchImpl: typeof fetch, model: string): Promise<EngineStatus> {
+  const modelTag = `ollama:${model}`;
   if (!isLoopbackUrl(cfg.ollama.baseUrl)) {
     return { ok: false, code: 'LOCAL_LLM_UNAVAILABLE', detail: 'OLLAMA_BASE_URL must be a loopback address', modelTag };
   }
@@ -55,13 +55,26 @@ export async function probeLlm(cfg: LocalConfig, fetchImpl: typeof fetch): Promi
   try {
     const body = (await res.json()) as { models?: Array<{ name?: string }> };
     const names = (body.models ?? []).map((m) => m.name ?? '').filter(Boolean);
-    if (!ollamaHasModel(names, cfg.ollama.model)) {
-      return { ok: false, code: 'LOCAL_LLM_MODEL_MISSING', detail: `model not installed: run \`ollama pull ${cfg.ollama.model}\``, modelTag };
+    if (!ollamaHasModel(names, model)) {
+      return { ok: false, code: 'LOCAL_LLM_MODEL_MISSING', detail: `model not installed: run \`ollama pull ${model}\``, modelTag };
     }
     return { ok: true, modelTag };
   } catch {
     return { ok: false, code: 'LOCAL_LLM_UNAVAILABLE', detail: 'unexpected response from Ollama', modelTag };
   }
+}
+
+/** Text model used by interpretation and translation. */
+export function probeLlm(cfg: LocalConfig, fetchImpl: typeof fetch): Promise<EngineStatus> {
+  return probeOllamaModel(cfg, fetchImpl, cfg.ollama.model);
+}
+
+/**
+ * Vision model used only by photo vocabulary.
+ * A missing vision model does not make the translator preset unready: qwen3 text and this model are independent.
+ */
+export function probeVision(cfg: LocalConfig, fetchImpl: typeof fetch): Promise<EngineStatus> {
+  return probeOllamaModel(cfg, fetchImpl, cfg.ollama.visionModel);
 }
 
 export async function probeTts(tts: LocalSpeechSynthesizer): Promise<EngineStatus> {

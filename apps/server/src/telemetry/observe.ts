@@ -124,6 +124,9 @@ export function observeBundle(bundle: ProviderBundle, o: ObserveOptions): Provid
             costBasis: cost.costBasis,
             priceRevision: cost.priceRevision,
             costDetail: cost.detail,
+            feature: meta.feature ?? 'translate',
+            cardId: meta.cardId ?? null,
+            language: hint.language ?? null,
           });
         }
         o.onRecorded?.({ preset: o.preset, costUsd: cost.costUsd });

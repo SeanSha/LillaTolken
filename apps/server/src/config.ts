@@ -22,6 +22,8 @@ export type ServerConfig = {
     apiKey: string | undefined;
     asrModel: string;
     llmModel: string;
+    /** Vision-capable model used only by photo vocabulary identification. */
+    visionModel: string;
     ttsModel: string;
     ttsVoice: string;
     /** undefined -> do not send the parameter */
@@ -33,6 +35,11 @@ export type ServerConfig = {
   persistEvents: boolean;
   eventsFile: string;
   local: LocalConfig;
+  vocabulary: {
+    /** Card words and paths. Photos and audio are files, not rows in this database. */
+    dbPath: string;
+    mediaDir: string;
+  };
   monitor: {
     /** SQLite metadata database (apps/server/data/telemetry.sqlite by default). */
     dbPath: string;
@@ -65,6 +72,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       apiKey: env.OPENAI_API_KEY?.trim() || undefined,
       asrModel: env.OPENAI_ASR_MODEL || 'gpt-4o-transcribe',
       llmModel: env.OPENAI_LLM_MODEL || 'gpt-4.1-mini',
+      visionModel: env.OPENAI_VISION_MODEL || 'gpt-4.1-mini',
       ttsModel: env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
       ttsVoice: env.OPENAI_TTS_VOICE || 'alloy',
       temperature: tempRaw === undefined ? 0 : tempRaw === '' ? undefined : num(tempRaw, 0),
@@ -75,6 +83,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     persistEvents: flag(env.PERSIST_EVENTS, true),
     eventsFile: path.join(repoRoot, 'apps/server/data/events.ndjson'),
     local: loadLocalConfig(env, repoRoot),
+    vocabulary: {
+      dbPath: resolveServerPath(env.VOCABULARY_DB_PATH, 'data/vocabulary.sqlite'),
+      mediaDir: resolveServerPath(env.VOCABULARY_MEDIA_DIR, 'data/vocabulary-media'),
+    },
     monitor: {
       dbPath: resolveServerPath(env.MONITOR_DB_PATH, 'data/telemetry.sqlite'),
       adminPassword: env.MONITOR_ADMIN_PASSWORD || undefined,

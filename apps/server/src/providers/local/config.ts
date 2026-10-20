@@ -7,7 +7,18 @@ import path from 'node:path';
 export type LocalConfig = {
   /** LOCAL_ENABLED=off hides the preset (used by tests / machines without local AI). */
   enabled: boolean;
-  ollama: { baseUrl: string; model: string; keepAlive: string; timeoutMs: number; numCtx: number };
+  ollama: {
+    baseUrl: string;
+    /** Text model for interpretation and translation. It cannot see a photo. */
+    model: string;
+    /** Vision model for photo vocabulary. Separate from `model`; never a cloud fallback. */
+    visionModel: string;
+    keepAlive: string;
+    timeoutMs: number;
+    /** Photo identification is slower than a text turn, especially on a cold load. */
+    visionTimeoutMs: number;
+    numCtx: number;
+  };
   whisper: {
     baseUrl: string;
     /** Model FILE the whisper-server was started with (used for the model tag + `local:start`). */
@@ -56,8 +67,10 @@ export function loadLocalConfig(env: NodeJS.ProcessEnv, repoRoot: string): Local
     ollama: {
       baseUrl: (env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/+$/, ''),
       model: env.OLLAMA_MODEL || 'qwen3:8b',
+      visionModel: env.OLLAMA_VISION_MODEL || 'qwen3-vl:8b',
       keepAlive: env.OLLAMA_KEEP_ALIVE || '30m',
       timeoutMs: num(env.OLLAMA_TIMEOUT_MS, 90_000),
+      visionTimeoutMs: num(env.OLLAMA_VISION_TIMEOUT_MS, 120_000),
       numCtx: num(env.OLLAMA_NUM_CTX, 4096),
     },
     whisper: {

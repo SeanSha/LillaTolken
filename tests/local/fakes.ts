@@ -78,7 +78,7 @@ export function fakeFetch(handlers: FetchHandlers) {
     log.push({ url, init });
     if (url.endsWith('/inference')) return handlers.whisper ? handlers.whisper(init!) : Response.json({ text: '我想去厕所。\n' });
     if (url.endsWith('/api/chat')) return handlers.chat ? handlers.chat(JSON.parse(String(init!.body))) : Response.json({ message: { content: '{}' } });
-    if (url.endsWith('/api/tags')) return handlers.tags ? handlers.tags() : Response.json({ models: [{ name: 'qwen3:8b' }] });
+    if (url.endsWith('/api/tags')) return handlers.tags ? handlers.tags() : Response.json({ models: [{ name: 'qwen3:8b' }, { name: 'qwen3-vl:8b' }] });
     return handlers.root ? handlers.root() : new Response('<html>whisper</html>');
   }) as typeof fetch;
   return { impl, log };

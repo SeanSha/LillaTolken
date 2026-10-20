@@ -48,6 +48,8 @@ function headersFor(
     'X-Request-Id': meta.requestId,
     ...(context?.sessionId ? { 'X-Session-Id': context.sessionId } : {}),
     ...(context?.direction ? { 'X-Direction': context.direction } : {}),
+    ...(meta.feature ? { 'X-Feature': meta.feature } : {}),
+    ...(meta.cardId ? { 'X-Card-Id': meta.cardId } : {}),
     ...extra,
   };
 }

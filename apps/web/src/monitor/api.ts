@@ -14,6 +14,7 @@ import type {
   SummaryResponse,
   TaskRow,
   TimeseriesPoint,
+  VocabularyUsageReport,
 } from '@kt/shared';
 
 export class MonitorApiError extends Error {
@@ -70,6 +71,7 @@ export const monitorApi = {
   login: (password: string) => call<{ authenticated: boolean }>('/api/monitor/login', json('POST', { password })),
   logout: () => call<{ authenticated: boolean }>('/api/monitor/logout', { method: 'POST' }),
   summary: (f: MonitorFilters) => call<SummaryResponse>(`/api/monitor/summary${toQuery(f)}`),
+  vocabularyUsage: (f: MonitorFilters) => call<VocabularyUsageReport>(`/api/monitor/vocabulary-usage${toQuery(f)}`),
   timeseries: (f: MonitorFilters, bucket: 'hour' | 'day') => call<TimeseriesPoint[]>(`/api/monitor/timeseries${toQuery(f, { bucket })}`),
   health: () => call<MonitorHealthResponse>('/api/monitor/health'),
   requests: (f: MonitorFilters, p: PageQuery) => call<Page<AiRequestRow>>(`/api/monitor/requests${toQuery(f, { ...p })}`),

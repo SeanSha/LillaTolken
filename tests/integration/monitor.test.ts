@@ -84,7 +84,8 @@ async function boot(env: Record<string, string> = {}, localEngines: 'up' | 'down
       modelTag: 'fake-cloud',
       available: true,
       providerName: 'openai',
-      modelFor: (stage: AiStage) => ({ ASR: 'gpt-4o-transcribe', INTERPRET: 'gpt-4.1-mini', TRANSLATE: 'gpt-4.1-mini', TTS: 'gpt-4o-mini-tts' })[stage],
+      modelFor: (stage: AiStage) =>
+        ({ ASR: 'gpt-4o-transcribe', INTERPRET: 'gpt-4.1-mini', TRANSLATE: 'gpt-4.1-mini', TTS: 'gpt-4o-mini-tts', IDENTIFY: 'gpt-4.1-mini' })[stage],
     },
     local: {
       bundle: local,

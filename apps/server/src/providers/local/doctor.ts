@@ -34,7 +34,7 @@ export type DoctorReport = {
   engines: LocalHealthResponse;
   /** Engine ports that also answer on this Mac's LAN address (must be empty). */
   lanExposure: Exposure[];
-  sizing: { recommendedAsr: string; recommendedLlm: string; notes: string[] };
+  sizing: { recommendedAsr: string; recommendedLlm: string; recommendedVision: string; notes: string[] };
   steps: string[];
   ready: boolean;
 };
@@ -60,20 +60,21 @@ async function tool(run: CommandRunner, bin: string, versionArgs: string[] | nul
 }
 
 /** Approximate download sizes (GB) used for the RAM/disk risk estimate BEFORE anything large is pulled. */
-const LLM_SIZES: Record<string, number> = { 'qwen3:4b': 2.6, 'qwen3:8b': 5.2, 'qwen3:14b': 9.3 };
+const LLM_SIZES: Record<string, number> = { 'qwen3:4b': 2.6, 'qwen3:8b': 5.2, 'qwen3:14b': 9.3, 'qwen3-vl:4b': 3.3, 'qwen3-vl:8b': 6.1 };
 
-export function recommendModels(memoryGb: number): { asr: string; llm: string; notes: string[] } {
+export function recommendModels(memoryGb: number): { asr: string; llm: string; vision: string; notes: string[] } {
   const notes: string[] = [];
+  notes.push('Photo vocabulary uses a separate vision model. The text model cannot see a picture, and local mode does not send the photo to a cloud model.');
   if (memoryGb < 12) {
-    notes.push('Under 12 GB RAM: use whisper small and a 4B-class LLM; expect slower Swedish/Chinese quality.');
-    return { asr: 'small', llm: 'qwen3:4b', notes };
+    notes.push('Under 12 GB RAM: use whisper small, a 4B-class LLM and a 4B-class vision model; expect slower Swedish/Chinese quality.');
+    return { asr: 'small', llm: 'qwen3:4b', vision: 'qwen3-vl:4b', notes };
   }
   if (memoryGb < 24) {
-    notes.push('12-23 GB RAM: whisper small + qwen3:8b fits; avoid running other heavy apps during tests.');
-    return { asr: 'small', llm: 'qwen3:8b', notes };
+    notes.push('12-23 GB RAM: whisper small + qwen3:8b fits; a vision model of similar size may need other heavy apps closed.');
+    return { asr: 'small', llm: 'qwen3:8b', vision: 'qwen3-vl:8b', notes };
   }
-  notes.push('24 GB+ RAM: qwen3:8b plus a larger Whisper (large-v3-turbo-q5_0) fits comfortably; a 14B-class LLM is possible if 8B Swedish fidelity proves insufficient.');
-  return { asr: 'large-v3-turbo-q5_0 (measure vs small first)', llm: 'qwen3:8b', notes };
+  notes.push('24 GB+ RAM: qwen3:8b plus a larger Whisper (large-v3-turbo-q5_0) fits comfortably; a 14B-class LLM is possible if 8B Swedish fidelity proves insufficient. qwen3-vl:8b can stay loaded beside the text model.');
+  return { asr: 'large-v3-turbo-q5_0 (measure vs small first)', llm: 'qwen3:8b', vision: 'qwen3-vl:8b', notes };
 }
 
 export async function runDoctor(
@@ -170,6 +171,10 @@ export async function runDoctor(
   if (!ollama.found) steps.push('Install Ollama: `brew install ollama` (or the Ollama app), then start it');
   if (engines.llm.code === 'LOCAL_LLM_UNAVAILABLE') steps.push('Start Ollama: open the Ollama app or run `ollama serve`');
   if (engines.llm.code === 'LOCAL_LLM_MODEL_MISSING') steps.push(`Pull the model once (downloads ~${wantedSize ?? '?'} GB): \`ollama pull ${cfg.ollama.model}\``);
+  if (engines.vision.code === 'LOCAL_LLM_MODEL_MISSING') {
+    const visionSize = LLM_SIZES[cfg.ollama.visionModel];
+    steps.push(`Pull the photo-vocabulary model once (downloads ~${visionSize ?? '?'} GB). The text model cannot see pictures: \`ollama pull ${cfg.ollama.visionModel}\``);
+  }
   if (!whisperServer.found) steps.push('Install whisper.cpp: `brew install whisper-cpp` (provides `whisper-server`)');
   if (!(await modelFileExists(cfg.whisper.modelFile))) {
     const name = path.basename(cfg.whisper.modelFile);
@@ -186,7 +191,8 @@ export async function runDoctor(
         : `SECURITY: ${e.name} answers on your LAN address (${e.address}:${e.port}). Restart it bound to 127.0.0.1 (\`npm run local:start\` does this).`,
     );
   }
-  if (engines.ready) steps.push('All local engines are ready. Run `npm run local:smoke`, then `npm run dev` and pick the `local` preset.');
+  if (engines.ready && engines.vision.ok) steps.push('All local engines are ready. Run `npm run local:smoke`, then `npm run dev` and pick the `local` preset.');
+  else if (engines.ready) steps.push('Translation engines are ready. Photo vocabulary still needs the vision model listed above.');
 
   return {
     hardware: {
@@ -211,7 +217,7 @@ export async function runDoctor(
     },
     engines,
     lanExposure,
-    sizing: { recommendedAsr: rec.asr, recommendedLlm: rec.llm, notes },
+    sizing: { recommendedAsr: rec.asr, recommendedLlm: rec.llm, recommendedVision: rec.vision, notes },
     steps: steps.filter(Boolean),
     ready: engines.ready,
   };
@@ -241,13 +247,14 @@ export function formatDoctor(r: DoctorReport, cfg: LocalConfig): string {
     `== Engines (${cfg.ollama.baseUrl}, ${cfg.whisper.baseUrl}; loopback only) ==`,
     eng('ASR', r.engines.asr),
     eng('LLM', r.engines.llm),
+    eng('VL', r.engines.vision),
     eng('TTS', r.engines.tts),
     `  status: ${r.engines.status}`,
     r.lanExposure.length
       ? `  WARN LAN exposure: ${r.lanExposure.map((e) => `${e.name} on ${e.address}:${e.port}`).join(', ')}  (must be loopback-only; see Next steps)`
       : '  OK   LAN exposure: none of the engine ports answer on this Mac\'s LAN address',
     '== Sizing for this Mac ==',
-    `  suggested: ASR ${r.sizing.recommendedAsr}; LLM ${r.sizing.recommendedLlm}  (configured: whisper ${whisperModelName(cfg.whisper.modelFile)}, ${cfg.ollama.model})`,
+    `  suggested: ASR ${r.sizing.recommendedAsr}; LLM ${r.sizing.recommendedLlm}; vision ${r.sizing.recommendedVision}  (configured: whisper ${whisperModelName(cfg.whisper.modelFile)}, ${cfg.ollama.model}, ${cfg.ollama.visionModel})`,
     ...r.sizing.notes.map((n) => `  - ${n}`),
     '== Next steps ==',
     ...(r.steps.length ? r.steps.map((s) => `  - ${s}`) : ['  (nothing to do)']),

@@ -8,7 +8,7 @@ import type { CostDetail, Direction, EvalEvent, ProviderPreset } from '@kt/share
 import type { AiRequestRow } from '@kt/shared';
 
 /** Bump with a new entry in MIGRATIONS. Migrations are additive and never drop user data. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -120,10 +120,20 @@ const MIGRATIONS: Record<number, string> = {
     CREATE INDEX idx_events_task ON events(task_id);
     CREATE INDEX idx_events_ts ON events(ts);
   `,
+  2: `
+    ALTER TABLE ai_requests ADD COLUMN feature TEXT NOT NULL DEFAULT 'translate';
+    ALTER TABLE ai_requests ADD COLUMN card_id TEXT;
+    ALTER TABLE ai_requests ADD COLUMN language TEXT;
+    CREATE INDEX idx_req_feature ON ai_requests(feature);
+    CREATE INDEX idx_req_card ON ai_requests(card_id);
+  `,
 };
 
-export type NewRequest = Omit<AiRequestRow, 'rid' | 'callIndex' | 'retryOfRid' | 'costDetail'> & {
+export type NewRequest = Omit<AiRequestRow, 'rid' | 'callIndex' | 'retryOfRid' | 'costDetail' | 'feature' | 'cardId' | 'language'> & {
   costDetail: CostDetail | null;
+  feature?: AiRequestRow['feature'];
+  cardId?: string | null;
+  language?: 'zh' | 'sv' | null;
 };
 
 const nul = <T>(v: T | undefined): T | null => (v === undefined ? null : v);
@@ -265,8 +275,8 @@ export class TelemetryDb {
            rid, request_id, call_index, task_id, session_id, segment_id, started_at, ended_at, preset, stage,
            direction, provider_name, model_tag, duration_ms, engine_inference_ms, conversion_ms, model_load_ms,
            input_audio_ms, output_audio_ms, prompt_tokens, output_tokens, cached_prompt_tokens, status, error_code,
-           cost_usd, cost_basis, price_revision, cost_detail, retry_of_rid)
-         VALUES (?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?)`,
+           cost_usd, cost_basis, price_revision, cost_detail, retry_of_rid, feature, card_id, language)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         rid,
         r.requestId,
         callIndex,
@@ -296,6 +306,9 @@ export class TelemetryDb {
         nul(r.priceRevision),
         r.costDetail ? JSON.stringify(r.costDetail) : null,
         failed?.rid ?? null,
+        r.feature ?? 'translate',
+        nul(r.cardId),
+        nul(r.language),
       );
       return rid;
     });

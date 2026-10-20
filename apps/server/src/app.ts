@@ -12,10 +12,16 @@ import {
   PresetSchema,
   TranslateRequestSchema,
   TtsRequestSchema,
+  VOCABULARY_LIMITS,
+  VocabularyIdentifyResponseSchema,
+  errorCodeOf,
   httpStatusFor,
+  sanitizeVocabularyResponse,
   toAppError,
+  type NormalizedUsage,
   type ProviderPreset,
   type RequestMeta,
+  type RequestStatus,
 } from '@kt/shared';
 import type { ServerConfig } from './config';
 import { EventStore } from './evaluation/eventStore';
@@ -26,6 +32,12 @@ import { TelemetryDb } from './telemetry/db';
 import { observeBundle } from './telemetry/observe';
 import { PriceRegistry } from './telemetry/pricing';
 import { budgetStatus } from './telemetry/queries';
+import { assertVocabularyImage } from './vocabulary/image';
+import { createVocabularyIdentifier, type VocabularyIdentifier } from './vocabulary/identify';
+import { recordVocabularyIdentify, vocabularyCardId } from './vocabulary/telemetry';
+import { createVocabularyRouter } from './vocabulary/routes';
+import { VocabularyLibraryStore } from './vocabulary/store';
+import { createLocalVocabularyIdentifier } from './providers/local/vision';
 
 type AppDeps = {
   config: ServerConfig;
@@ -34,6 +46,12 @@ type AppDeps = {
   /** SQLite telemetry. Defaults to config.monitor.dbPath (tests pass ':memory:'). */
   db?: TelemetryDb;
   prices?: PriceRegistry;
+  /** Photo vocabulary vision for cloud and mock. Defaults to the OpenAI Responses API. Tests inject a fake. */
+  vocabulary?: VocabularyIdentifier;
+  /** Photo vocabulary vision for the local preset. Defaults to the Ollama vision model. Tests inject a fake. */
+  localVocabulary?: VocabularyIdentifier;
+  /** Household card library. Defaults to config.vocabulary paths on first use. */
+  vocabularyStore?: VocabularyLibraryStore;
 };
 
 const ID_RE = /^[A-Za-z0-9_.:-]{1,100}$/;
@@ -51,7 +69,7 @@ const handler =
     fn(req, res).catch((error) => sendError(res, error));
   };
 
-export function createApp({ config, registry, events, db: injectedDb, prices: injectedPrices }: AppDeps) {
+export function createApp({ config, registry, events, db: injectedDb, prices: injectedPrices, vocabulary, localVocabulary, vocabularyStore }: AppDeps) {
   const store = events ?? new EventStore(config.persistEvents ? config.eventsFile : undefined);
   const db = injectedDb ?? new TelemetryDb(config.monitor.dbPath);
   const prices = injectedPrices ?? PriceRegistry.fromFile(config.monitor.pricesFile);
@@ -104,6 +122,9 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
 
   const json = express.json({ limit: '256kb' });
   const rawAudio = express.raw({ type: () => true, limit: PAYLOAD_LIMITS.maxAudioBytes });
+  const rawImage = express.raw({ type: () => true, limit: VOCABULARY_LIMITS.maxImageBytes });
+  const identifyVocabulary = vocabulary ?? createVocabularyIdentifier(config.openai);
+  const identifyLocalVocabulary = localVocabulary ?? createLocalVocabularyIdentifier(config.local);
 
   /** Parses request metadata headers and resolves the provider for the (frozen) task preset. */
   function context(req: Request) {
@@ -122,6 +143,8 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
     if (!ID_RE.test(taskId) || !ID_RE.test(requestId)) throw new AppError('BAD_REQUEST', 'missing or invalid ids');
     const sessionHeader = req.header('x-session-id') ?? '';
     const directionHeader = DirectionSchema.safeParse(req.header('x-direction'));
+    const featureHeader = req.header('x-feature');
+    const cardId = vocabularyCardId(req.header('x-card-id'));
 
     // Abort upstream work if the client goes away (e.g. cancelled task).
     const controller = new AbortController();
@@ -132,6 +155,8 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
       signal: controller.signal,
       sessionId: ID_RE.test(sessionHeader) ? sessionHeader : undefined,
       direction: directionHeader.success ? directionHeader.data : undefined,
+      feature: featureHeader === 'vocabulary' ? 'vocabulary' : undefined,
+      cardId: cardId ?? undefined,
     };
     return { provider, meta, preset };
   }
@@ -141,6 +166,12 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
     req.res?.on('close', () => {
       if (!req.res?.writableEnded) fn();
     });
+  }
+
+  function reqAbortedSignal(req: Request): AbortSignal {
+    const controller = new AbortController();
+    res_onClose(req, () => controller.abort());
+    return controller.signal;
   }
 
   app.get('/api/health', async (_req, res) => {
@@ -215,6 +246,63 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
       res.json({ translation });
     }),
   );
+
+  // Photo vocabulary. The body is the image bytes and is not persisted. Dialogue ids are not required.
+  app.post(
+    '/api/vocabulary/identify',
+    rawImage,
+    handler(async (req, res) => {
+      const body = req.body as unknown;
+      if (!Buffer.isBuffer(body)) throw new AppError('BAD_REQUEST', 'image body required');
+      const image = assertVocabularyImage(new Uint8Array(body), req.header('content-type') ?? '');
+      const presetHeader = req.header('x-provider-preset');
+      const presetResult = presetHeader === undefined ? { success: true as const, data: 'cloud' as const } : PresetSchema.safeParse(presetHeader);
+      if (!presetResult.success) throw new AppError('BAD_REQUEST', 'unknown provider preset');
+      const useLocal = presetResult.data === 'local';
+      const signal = reqAbortedSignal(req);
+      const started = Date.now();
+      const usage: NormalizedUsage = {};
+      let status: RequestStatus = 'succeeded';
+      let errorCode: string | null = null;
+      try {
+        const result = await (useLocal ? identifyLocalVocabulary : identifyVocabulary).identify(image, signal, (reported) => Object.assign(usage, reported));
+        const parsed = VocabularyIdentifyResponseSchema.safeParse(result);
+        if (!parsed.success) throw new AppError('INVALID_MODEL_OUTPUT', 'vocabulary result failed schema validation');
+        res.setHeader('Cache-Control', 'no-store');
+        res.json(sanitizeVocabularyResponse(parsed.data));
+      } catch (error) {
+        status = signal.aborted ? 'cancelled' : error instanceof AppError && error.category === 'TIMEOUT' ? 'timeout' : 'failed';
+        errorCode = errorCodeOf(error);
+        throw error;
+      } finally {
+        try {
+          recordVocabularyIdentify({
+            db,
+            prices,
+            preset: useLocal ? 'local' : 'cloud',
+            providerName: useLocal ? 'local' : 'openai',
+            model: useLocal ? `ollama:${config.local.ollama.visionModel}` : config.openai.visionModel,
+            cardId: vocabularyCardId(req.header('x-card-id')),
+            startedAtMs: started,
+            durationMs: Date.now() - started,
+            status,
+            errorCode,
+            usage,
+          });
+        } catch {
+          // A monitoring failure must not change the identify result.
+        }
+      }
+    }),
+  );
+
+  let vocabularyRouter: ReturnType<typeof createVocabularyRouter> | null = null;
+  app.use('/api/vocabulary', (req, res, next) => {
+    vocabularyRouter ??= createVocabularyRouter(
+      vocabularyStore ?? new VocabularyLibraryStore(config.vocabulary.dbPath, config.vocabulary.mediaDir),
+    );
+    return vocabularyRouter(req, res, next);
+  });
 
   app.post(
     '/api/tts',
