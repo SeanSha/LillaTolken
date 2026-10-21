@@ -89,7 +89,11 @@ Once the speech is understood, it translates directly. The screen shows the orig
 
 ```mermaid
 flowchart TD
-  A[Press and speak] --> B{Is this short turn finished?}
+  H[Home]
+  H -->|Speak Chinese or Swedish| A[Press and speak]
+  H -->|Photo vocabulary| P[Photograph one object, not a person]
+  H -->|My cards| L[Cards grouped by category]
+  A --> B{Is this short turn finished?}
   B -->|Say a bit more| A
   B -->|Finished| C[Understand]
   C -->|Not heard, tries left| A
@@ -102,6 +106,13 @@ flowchart TD
   D -->|No, a correction is allowed| A
   D -->|Still no after the corrections| Z
   C -->|Swedish| G[Chinese text and voice]
+  P --> V[Name that one object]
+  V -->|One object| K[Card: Chinese and Swedish]
+  V -->|Several objects| Q[Pick one]
+  Q --> K
+  V -->|A person, or nothing| P
+  K --> L
+  L -->|Tap| S[Hear Chinese or Swedish]
 ```
 
 A wrong or unheard turn can be tried again. When the allowed tries are used up, the turn stops instead of guessing. Changing direction in the middle first asks whether to abandon this turn. The translation can be replayed, or spoken once more in the same direction.

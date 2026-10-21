@@ -162,7 +162,50 @@ flowchart TD
   sw -->|SWITCH_NO, keep the checkpoint| seg
 ```
 
-This is the one XState v5 machine in `apps/web/src/dialogue/machine.ts`. Recording is one state for the first utterance, a clarification answer, and a correction. A question, a confirmation, and the result each synthesize speech before the child answers; if that speech fails, the text stays on screen. `RETRY` from a recoverable error returns to the stage that failed: recognition, interpretation, translation, or recording when nothing was kept. `CANCEL` on an unfinished task returns to Idle and does not update the last delivered message. A direction change during the task always asks first. Idle and Delivered start the new direction without that question. Photo vocabulary is a separate flow and does not enter this machine.
+Home is the fork. **Speak Chinese** or **Speak Swedish** enters the dialogue machine above. **Photo Vocabulary** and **My Vocabulary Cards** enter the screen flow below. That flow is not a second XState machine and does not share the dialogue task, counters, or evaluation events.
+
+```mermaid
+flowchart TD
+  home[Home]
+  cam[Camera or photo library]
+  preview[Preview the photo]
+  look[Identify one object]
+  blocked[Person, or no object]
+  choose[Several objects: pick one]
+  draft[Check Chinese and Swedish]
+  saved[Card saved on this device]
+  library[My cards, grouped by category]
+  listen[Play Chinese or Swedish]
+  parent[Hold parent, then household passphrase]
+  err[Identify failed]
+
+  home -->|Photo Vocabulary| cam
+  home -->|My cards| library
+  cam --> preview
+  preview -->|Identify| look
+  preview -->|Another photo| cam
+  look -->|one object| draft
+  look -->|several objects| choose
+  choose -->|one chosen| draft
+  look -->|not sure which object| draft
+  look -->|person or nothing| blocked
+  look -->|request failed| err
+  blocked -->|Another photo| cam
+  err -->|Try the same photo| look
+  err -->|Another photo| cam
+  draft -->|Save| saved
+  draft -->|this photo is already a card| library
+  saved --> library
+  library -->|open a card| listen
+  listen -->|delete, after a confirm| library
+  library -->|another photo| cam
+  library -->|pair this household| parent
+  parent -->|sync cards| library
+```
+
+The dialogue chart is the one XState v5 machine in `apps/web/src/dialogue/machine.ts`. Recording is one state for the first utterance, a clarification answer, and a correction. A question, a confirmation, and the result each synthesize speech before the child answers; if that speech fails, the text stays on screen. `RETRY` from a recoverable error returns to the stage that failed: recognition, interpretation, translation, or recording when nothing was kept. `CANCEL` on an unfinished task returns to Idle and does not update the last delivered message. A direction change during the task always asks first. Idle and Delivered start the new direction without that question.
+
+The photo chart follows `apps/web/src/vocabulary/VocabularyShell.tsx`. The camera opens from Home. One concrete object becomes a card with a Chinese noun, a Swedish noun, an article, and a preschool category. A person or a photo with no object is refused and no name is written. Several prominent objects wait for a choice. An uncertain photo does not invent a word. The card is stored on this device first. The same photo opens the existing card instead of creating another. Speech is the existing TTS call, cached on the card after the first play. Pairing and deletion sit on the parent page, opened by holding the small dot for about two seconds. The back arrow returns to Home and leaves the dialogue machine idle.
 
 ### 4.3 Essential policy
 
