@@ -1,4 +1,5 @@
 import type { AudioData } from '@kt/shared';
+import { setAudioSession } from './session';
 
 // 0.1 s of silence. Played inside a user gesture to "unlock" the shared <audio> element on iOS.
 const SILENT_WAV =
@@ -45,6 +46,7 @@ export class AudioPlayer {
 
   /** Resolves 'ended' when playback completes, 'stopped' if interrupted; rejects if the browser refuses/decoding fails. */
   play(audio: AudioData): Promise<PlayResult> {
+    setAudioSession('playback');
     this.stop();
     const el = this.ensure();
     const token = ++this.token;

@@ -132,6 +132,9 @@ describe('PriceRegistry file handling', () => {
     expect(llm.costBasis).toBe('reported_usage');
     expect(llm.costUsd).toBeCloseTo((485 * 0.4 + 28 * 1.6) / 1e6, 12);
     expect(reg.calculate(cloud({ model: 'gpt-4o-transcribe', stage: 'ASR', usage: { inputAudioMs: 60_000 } })).costUsd).toBeCloseTo(0.006, 10);
+    const luna = reg.calculate(cloud({ model: 'gpt-6-luna', stage: 'TRANSLATE', usage: { promptTokens: 485, cachedPromptTokens: 0, outputTokens: 28 } }));
+    expect(luna.costUsd).toBeCloseTo((485 * 0.1 + 28 * 0.5) / 1e6, 12);
+    expect(reg.calculate(cloud({ model: 'gpt-transcribe', stage: 'ASR', usage: { inputAudioMs: 60_000 } })).costUsd).toBeCloseTo(0.0045, 10);
     expect(reg.describe().editableOnlyOnServer).toBe(true);
   });
 });

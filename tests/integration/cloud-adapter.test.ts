@@ -67,13 +67,21 @@ describe('OpenAIDialogueModel (stub client)', () => {
     expect(await model.translate({ text: '我想去厕所。', direction: 'ZH_TO_SV' }, meta)).toBe('Jag vill gå på toaletten.');
     const create = (client as unknown as { chat: { completions: { create: ReturnType<typeof vi.fn> } } }).chat.completions.create;
     const params = create.mock.calls[0]?.[0] as { model: string; response_format: { type: string; json_schema: { strict: boolean } }; temperature?: number };
-    expect(params.model).toBe(cfg.llmModel);
+    expect(params.model).toBe('gpt-6-luna');
     expect(params.response_format.type).toBe('json_schema');
     expect(params.response_format.json_schema.strict).toBe(true);
-    expect(params.temperature).toBe(0);
+    expect(params).not.toHaveProperty('temperature');
 
     const bad = new OpenAIDialogueModel(llmClient(JSON.stringify({ translation: '' })), cfg);
     await expect(bad.translate({ text: 'x', direction: 'SV_TO_ZH' }, meta)).rejects.toMatchObject({ category: 'INVALID_MODEL_OUTPUT' });
+  });
+
+  it('still sends temperature 0 for a non-GPT-6 Cloud model', async () => {
+    const older = loadConfig({ OPENAI_API_KEY: 'k', OPENAI_LLM_MODEL: 'gpt-4.1-mini' } as NodeJS.ProcessEnv).openai;
+    const client = llmClient(JSON.stringify({ translation: 'Hej' }));
+    await new OpenAIDialogueModel(client, older).translate({ text: '你好', direction: 'ZH_TO_SV' }, meta);
+    const create = (client as unknown as { chat: { completions: { create: ReturnType<typeof vi.fn> } } }).chat.completions.create;
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ model: 'gpt-4.1-mini', temperature: 0 });
   });
 
   it('omits temperature when configured empty (reasoning models)', async () => {
@@ -107,10 +115,21 @@ describe('OpenAI ASR/TTS adapters (stub client)', () => {
       meta,
     );
     expect(text).toBe('我想去厕所。');
-    const params = create.mock.calls[0]?.[0] as { file: { name: string }; model: string; language: string };
+    const params = create.mock.calls[0]?.[0] as { file: { name: string }; model: string; language?: string; languages?: string[] };
     expect(params.file.name).toBe('segment.m4a');
-    expect(params.language).toBe('zh');
-    expect(params.model).toBe(cfg.asrModel);
+    expect(params.model).toBe('gpt-transcribe');
+    expect(params.languages).toEqual(['cmn']);
+    expect(params).not.toHaveProperty('language');
+  });
+
+  it('keeps the singular language field for the previous transcription models', async () => {
+    const older = { ...cfg, asrModel: 'gpt-4o-transcribe' };
+    const create = vi.fn(async (_params: unknown) => ({ text: 'hej' }));
+    const client = { audio: { transcriptions: { create } } } as unknown as OpenAI;
+    await new OpenAISpeechRecognizer(client, older).transcribe({ bytes: new Uint8Array([1]), mimeType: 'audio/webm' }, 'sv', meta);
+    const params = create.mock.calls[0]?.[0] as { model: string; language?: string; languages?: string[] };
+    expect(params).toMatchObject({ model: 'gpt-4o-transcribe', language: 'sv' });
+    expect(params).not.toHaveProperty('languages');
   });
 
   it('TTS returns mp3 bytes and treats an empty body as a TTS failure', async () => {

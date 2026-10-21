@@ -135,6 +135,12 @@ function RequestDetail({ r }: { r: AiRequestRow }) {
       <KV
         rows={[
           ['Provider / model', `${r.providerName} · ${r.modelTag}`],
+          ['TTS voice used', r.voice ?? '—'],
+          ['Environment', r.environment],
+          ['Network', r.networkType],
+          ['Noise', r.noiseLevel],
+          ['Test session', r.testRunId ?? '—'],
+          ['Model configuration', r.modelConfigId ?? 'UNKNOWN'],
           ['Started', fmtTime(r.startedAt)],
           ['Direction', r.direction ? DIRECTION_LABEL[r.direction] : '—'],
           ['Status', `${r.status}${r.errorCode ? ` (${r.errorCode})` : ''}`],

@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { AiStage, Direction, MonitorFilters, ProviderPreset } from '@kt/shared';
+import type { AiStage, Direction, EvalEnvironment, EvalNetwork, EvalNoise, MonitorFilters, ProviderPreset } from '@kt/shared';
 
 export type RangeKey = 'today' | '7d' | '30d' | 'all' | 'custom';
 
@@ -13,6 +13,11 @@ export type FilterState = {
   model: string;
   status: string;
   scenarioId: string;
+  environment: '' | EvalEnvironment;
+  networkType: '' | EvalNetwork;
+  noiseLevel: '' | EvalNoise;
+  testRunId: string;
+  modelConfigId: string;
 };
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -25,6 +30,11 @@ export const DEFAULT_FILTERS: FilterState = {
   model: '',
   status: '',
   scenarioId: '',
+  environment: '',
+  networkType: '',
+  noiseLevel: '',
+  testRunId: '',
+  modelConfigId: '',
 };
 
 /** Resolved at call time so "today" / "last 7 days" keep moving while the page polls. */
@@ -46,6 +56,11 @@ export function resolveFilters(s: FilterState, now: Date = new Date()): MonitorF
   if (s.model.trim()) f.model = s.model.trim();
   if (s.status) f.status = s.status;
   if (s.scenarioId.trim()) f.scenarioId = s.scenarioId.trim();
+  if (s.environment) f.environment = s.environment;
+  if (s.networkType) f.networkType = s.networkType;
+  if (s.noiseLevel) f.noiseLevel = s.noiseLevel;
+  if (s.testRunId) f.testRunId = s.testRunId;
+  if (s.modelConfigId) f.modelConfigId = s.modelConfigId;
   return f;
 }
 

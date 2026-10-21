@@ -57,10 +57,10 @@ OPENAI_API_KEY=sk-...
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `OPENAI_ASR_MODEL` | `gpt-4o-transcribe` | 语音识别 |
-| `OPENAI_LLM_MODEL` | `gpt-4.1-mini` | 理解 + 翻译(严格 JSON schema) |
+| `OPENAI_ASR_MODEL` | `gpt-transcribe` | 语音识别。该模型用 `languages`，不再接受旧的单个 `language` 字段 |
+| `OPENAI_LLM_MODEL` | `gpt-6-luna` | 理解 + 翻译(严格 JSON schema)。默认推理强度为 medium |
 | `OPENAI_TTS_MODEL` / `OPENAI_TTS_VOICE` | `gpt-4o-mini-tts` / `alloy` | 语音合成(mp3,iOS 可播放) |
-| `OPENAI_LLM_TEMPERATURE` | `0` | 对不支持 `temperature` 的推理模型请**留空** |
+| `OPENAI_LLM_TEMPERATURE` | `0` | `gpt-6-luna` 的对话请求会自动省略该参数(默认推理强度会拒绝 `temperature`)。识图和其他非 GPT-6 模型仍会发送 |
 | `PROMPT_MEMORY` | `on` | 是否把"上一条已送达消息"作为可选上下文发给 LLM;Cloud/Local 对比时保持一致 |
 
 > 默认模型 ID 是按写代码时的认知设置的,**我没有用真实账号验证它们当前对你的账号可用**。如果报错,请在 `.env` 中改成你账号可用的模型。模型与提示词版本会写入评估日志的 `modelTag`,保证成人测试可复现。

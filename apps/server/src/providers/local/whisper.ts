@@ -10,7 +10,7 @@ import { wavDurationMs } from '../../media/duration';
 import { extensionForMime } from '../cloud';
 import { CommandError, type CommandRunner } from './exec';
 import { mapFetchError, timeoutSignal, unavailable, withTempDir } from './common';
-import type { LocalConfig } from './config';
+import { whisperModelName, type LocalConfig } from './config';
 
 /** Biases Whisper to emit Simplified Chinese (without it the output is often Traditional). */
 const ZH_PROMPT = '以下是普通话的句子。';
@@ -93,6 +93,7 @@ export class LocalSpeechRecognizer implements SpeechRecognizer {
       conversionMs,
       engineInferenceMs: performance.now() - started, // measured HTTP sub-step: whisper.cpp reports no timing
       inputAudioMs: durationMs ?? audio.durationMs,
+      resolvedModel: `whisper.cpp:${whisperModelName(this.cfg.whisper.modelFile)}`,
     });
     return cleanWhisperText(text, language);
   }

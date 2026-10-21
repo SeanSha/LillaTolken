@@ -17,6 +17,8 @@ import {
 } from '@kt/shared';
 import type { ServerConfig } from '../../config';
 import { mp3DurationMs } from '../../media/duration';
+import { transcodeToWav, type TranscodeOptions } from '../../media/transcode';
+import { CommandError } from '../local/exec';
 import { parseInterpretation, parseJson, parseTranslation } from '../dialogueParsing';
 import {
   INTERPRET_JSON_SCHEMA,
@@ -67,28 +69,70 @@ export function extensionForMime(mimeType: string): string {
 
 const memoryNote = (prev: InterpretInput['previousDelivered']) => (prev ? prev : null);
 
+/** GPT-6 defaults to a reasoning effort other than `none`, which rejects `temperature`. */
+export function dialogueTemperature(model: string, temperature: number | undefined): { temperature?: number } {
+  if (temperature === undefined || model.startsWith('gpt-6')) return {};
+  return { temperature };
+}
+
+/**
+ * `gpt-transcribe` takes `languages` and rejects the older singular `language` field.
+ * Mandarin is hinted as `cmn`: `zh` comes back in Traditional characters.
+ */
+export function asrLanguageBody(model: string, language: Language): { language: Language } | { languages: string[] } {
+  if (model === 'gpt-transcribe' || model.startsWith('gpt-transcribe-')) {
+    return { languages: [language === 'zh' ? 'cmn' : language] };
+  }
+  return { language };
+}
+
 export class OpenAISpeechRecognizer implements SpeechRecognizer {
   constructor(
     private readonly client: OpenAI,
     private readonly cfg: OpenAIConfig,
+    private readonly prep?: Pick<TranscodeOptions, 'ffmpegBin' | 'tmpRoot'>,
   ) {}
 
   async transcribe(audio: AudioData, language: Language, meta: RequestMeta): Promise<string> {
+    const payload = await this.audioForUpload(audio, meta);
     try {
-      const file = await toFile(audio.bytes, `segment.${extensionForMime(audio.mimeType)}`, {
-        type: audio.mimeType.split(';')[0] || 'audio/webm',
+      const file = await toFile(payload.bytes, `segment.${extensionForMime(payload.mimeType)}`, {
+        type: payload.mimeType.split(';')[0] || 'audio/webm',
       });
       const result = await this.client.audio.transcriptions.create(
-        { file, model: this.cfg.asrModel, language, response_format: 'json' },
+        {
+          file,
+          model: this.cfg.asrModel,
+          response_format: 'json',
+          ...asrLanguageBody(this.cfg.asrModel, language),
+        } as OpenAI.Audio.TranscriptionCreateParamsNonStreaming,
         { signal: meta.signal, timeout: this.cfg.timeoutMs },
       );
       // Metadata only: usage numbers, never the text.
       const usage = (result as { usage?: { type?: string; input_tokens?: number; output_tokens?: number; seconds?: number } }).usage;
-      if (usage?.type === 'tokens') meta.report?.({ promptTokens: usage.input_tokens, outputTokens: usage.output_tokens });
-      else if (usage?.type === 'duration' && usage.seconds !== undefined) meta.report?.({ inputAudioMs: Math.round(usage.seconds * 1000) });
+      const reported: { promptTokens?: number; outputTokens?: number; inputAudioMs?: number; resolvedModel: string } = { resolvedModel: this.cfg.asrModel };
+      if (usage?.type === 'tokens') {
+        reported.promptTokens = usage.input_tokens;
+        reported.outputTokens = usage.output_tokens;
+      } else if (usage?.type === 'duration' && usage.seconds !== undefined) reported.inputAudioMs = Math.round(usage.seconds * 1000);
+      meta.report?.(reported);
       return (result.text ?? '').trim();
     } catch (error) {
       throw mapOpenAIError(error);
+    }
+  }
+
+  /** Decode phone containers to WAV so a one-second MP4 index cannot hide the rest of the utterance. */
+  private async audioForUpload(audio: AudioData, meta: RequestMeta): Promise<AudioData> {
+    if (!this.prep) return audio;
+    try {
+      return (await transcodeToWav(audio, { ...this.prep, signal: meta.signal })) ?? audio;
+    } catch (error) {
+      if (error instanceof CommandError) {
+        if (error.kind === 'timeout') throw new AppError('TIMEOUT', 'audio conversion timed out');
+        throw new AppError('TIMEOUT', 'request aborted');
+      }
+      throw error;
     }
   }
 }
@@ -118,17 +162,16 @@ export class OpenAIDialogueModel implements DialogueModel {
             type: 'json_schema',
             json_schema: { name: schemaName, strict: true, schema: schema as Record<string, unknown> },
           },
-          ...(this.cfg.temperature === undefined ? {} : { temperature: this.cfg.temperature }),
+          ...dialogueTemperature(this.cfg.llmModel, this.cfg.temperature),
         },
         { signal: meta.signal, timeout: this.cfg.timeoutMs },
       );
-      if (completion.usage) {
-        meta.report?.({
-          promptTokens: completion.usage.prompt_tokens,
-          outputTokens: completion.usage.completion_tokens,
-          cachedPromptTokens: completion.usage.prompt_tokens_details?.cached_tokens,
-        });
-      }
+      meta.report?.({
+        promptTokens: completion.usage?.prompt_tokens,
+        outputTokens: completion.usage?.completion_tokens,
+        cachedPromptTokens: completion.usage?.prompt_tokens_details?.cached_tokens,
+        resolvedModel: completion.model || this.cfg.llmModel,
+      });
       return parseJson(completion.choices[0]?.message?.content);
     } catch (error) {
       throw mapOpenAIError(error);
@@ -184,7 +227,7 @@ export class OpenAISpeechSynthesizer implements SpeechSynthesizer {
       const bytes = new Uint8Array(await response.arrayBuffer());
       if (bytes.length === 0) throw new AppError('TTS', 'empty audio from TTS');
       const durationMs = mp3DurationMs(bytes);
-      if (durationMs !== undefined) meta.report?.({ outputAudioMs: durationMs });
+      meta.report?.({ outputAudioMs: durationMs, resolvedModel: this.cfg.ttsModel, resolvedVoice: this.cfg.ttsVoice });
       return { bytes, mimeType: 'audio/mpeg', durationMs };
     } catch (error) {
       const mapped = mapOpenAIError(error);
@@ -203,11 +246,11 @@ export function createUnconfiguredCloudProvider(): ProviderBundle {
   };
 }
 
-export function createCloudProvider(cfg: OpenAIConfig): ProviderBundle {
+export function createCloudProvider(cfg: OpenAIConfig, prep?: Pick<TranscodeOptions, 'ffmpegBin' | 'tmpRoot'>): ProviderBundle {
   if (!cfg.apiKey) return createUnconfiguredCloudProvider();
   const client = new OpenAI({ apiKey: cfg.apiKey, maxRetries: cfg.maxRetries, timeout: cfg.timeoutMs });
   return {
-    asr: new OpenAISpeechRecognizer(client, cfg),
+    asr: new OpenAISpeechRecognizer(client, cfg, prep),
     dialogue: new OpenAIDialogueModel(client, cfg),
     tts: new OpenAISpeechSynthesizer(client, cfg),
   };

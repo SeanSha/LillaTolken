@@ -1,9 +1,11 @@
 import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type FormEvent, type ReactNode } from 'react';
+import type { ModelConfig, TestRun } from '@kt/shared';
 import { AI_STAGES } from '@kt/shared';
 import { MonitorApiError, monitorApi } from './api';
 import { CostTab } from './CostTab';
 import { DEFAULT_FILTERS, MonitorContext, resolveFilters, type FilterState, type RangeKey } from './context';
 import { EvaluationTab } from './EvaluationTab';
+import { TestSessionsTab } from './TestSessionsTab';
 import { OverviewTab } from './OverviewTab';
 import { RequestsTab } from './RequestsTab';
 import { TasksTab } from './TasksTab';
@@ -26,11 +28,12 @@ class TabBoundary extends Component<{ children: ReactNode; resetKey: string }, {
   }
 }
 
-type Tab = 'overview' | 'requests' | 'tasks' | 'evaluation' | 'cost';
+type Tab = 'overview' | 'requests' | 'tasks' | 'sessions' | 'evaluation' | 'cost';
 const TABS: Array<[Tab, string]> = [
   ['overview', 'Overview'],
   ['requests', 'Request Explorer'],
   ['tasks', 'Task Explorer'],
+  ['sessions', 'Test sessions'],
   ['evaluation', 'Evaluation'],
   ['cost', 'Cost & Data'],
 ];
@@ -169,6 +172,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === 'overview' && <OverviewTab />}
           {tab === 'requests' && <RequestsTab />}
           {tab === 'tasks' && <TasksTab />}
+          {tab === 'sessions' && <TestSessionsTab />}
           {tab === 'evaluation' && <EvaluationTab />}
           {tab === 'cost' && <CostTab />}
         </TabBoundary>
@@ -178,6 +182,18 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
 }
 
 function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K extends keyof FilterState>(k: K, v: FilterState[K]) => void; onReset: () => void }) {
+  const [runs, setRuns] = useState<TestRun[]>([]);
+  const [configs, setConfigs] = useState<ModelConfig[]>([]);
+  useEffect(() => {
+    let stop = false;
+    const load = () => {
+      void monitorApi.testRuns().then((r) => { if (!stop) setRuns(r.runs); }).catch(() => undefined);
+      void monitorApi.modelConfigs().then((r) => { if (!stop) setConfigs(r.configs); }).catch(() => undefined);
+    };
+    load();
+    const timer = setInterval(load, 15_000);
+    return () => { stop = true; clearInterval(timer); };
+  }, []);
   return (
     <section className="mon-filters" aria-label="Filters">
       <label>
@@ -243,6 +259,56 @@ function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K ex
       <label>
         Scenario
         <input value={filters.scenarioId} placeholder="id" onChange={(e) => set('scenarioId', e.target.value)} />
+      </label>
+      <label>
+        Environment
+        <select value={filters.environment} onChange={(e) => set('environment', e.target.value as FilterState['environment'])}>
+          <option value="">all</option>
+          <option value="HOME">HOME</option>
+          <option value="OUTDOOR">OUTDOOR</option>
+          <option value="UNKNOWN">UNKNOWN</option>
+        </select>
+      </label>
+      <label>
+        Network
+        <select value={filters.networkType} onChange={(e) => set('networkType', e.target.value as FilterState['networkType'])}>
+          <option value="">all</option>
+          <option value="WIFI">WIFI</option>
+          <option value="CELLULAR">CELLULAR</option>
+          <option value="UNKNOWN">UNKNOWN</option>
+        </select>
+      </label>
+      <label>
+        Noise
+        <select value={filters.noiseLevel} onChange={(e) => set('noiseLevel', e.target.value as FilterState['noiseLevel'])}>
+          <option value="">all</option>
+          <option value="QUIET">QUIET</option>
+          <option value="MODERATE">MODERATE</option>
+          <option value="NOISY">NOISY</option>
+          <option value="UNKNOWN">UNKNOWN</option>
+        </select>
+      </label>
+      <label>
+        Test session
+        <select value={filters.testRunId} onChange={(e) => set('testRunId', e.target.value)}>
+          <option value="">all</option>
+          {runs.map((r) => (
+            <option key={r.testRunId} value={r.testRunId}>
+              {r.label} · {r.environment}/{r.networkType} · {r.code}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Model configuration
+        <select value={filters.modelConfigId} onChange={(e) => set('modelConfigId', e.target.value)}>
+          <option value="">all</option>
+          {configs.map((c) => (
+            <option key={c.modelConfigId} value={c.modelConfigId}>
+              {c.preset} · {c.asrModel} / {c.interpretModel} / {c.ttsModel}
+            </option>
+          ))}
+        </select>
       </label>
       <button type="button" onClick={onReset}>
         Reset

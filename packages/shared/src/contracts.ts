@@ -31,6 +31,13 @@ export type NormalizedUsage = {
   conversionMs?: number;
   /** Model load / cold start (Ollama `load_duration`). */
   modelLoadMs?: number;
+  /**
+   * Model id the adapter actually called. Used when it differs from the configured id
+   * (for example a dated snapshot returned by the provider). Never an API key.
+   */
+  resolvedModel?: string;
+  /** TTS voice actually used for this call, when the engine has one. */
+  resolvedVoice?: string;
 };
 
 export type RequestMeta = {
@@ -46,6 +53,8 @@ export type RequestMeta = {
   /** Set by the vocabulary client. Absent on the translator, which stays `translate`. */
   feature?: 'translate' | 'vocabulary';
   cardId?: string;
+  /** Researcher-issued test-session code. Absent when the phone is not paired. */
+  testCode?: string;
   report?: (usage: NormalizedUsage) => void;
 };
 

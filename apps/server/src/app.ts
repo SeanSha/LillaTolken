@@ -5,6 +5,7 @@ import {
   AppError,
   DirectionSchema,
   EvalEventSchema,
+  TEST_CODE_RE,
   InterpretRequestSchema,
   LanguageSchema,
   PAYLOAD_LIMITS,
@@ -22,13 +23,15 @@ import {
   type ProviderPreset,
   type RequestMeta,
   type RequestStatus,
+  type TaskSnapshot,
 } from '@kt/shared';
 import type { ServerConfig } from './config';
 import { EventStore } from './evaluation/eventStore';
-import { MonitorAuth, resolveAdminPassword, type AdminPassword } from './monitor/auth';
+import { MonitorAuth, resolveAdminPassword, sameOrigin, type AdminPassword } from './monitor/auth';
 import { createMonitorRouter } from './monitor/routes';
 import type { ProviderRegistry } from './providers/registry';
 import { TelemetryDb } from './telemetry/db';
+import { snapshotForPreset } from './telemetry/modelConfig';
 import { observeBundle } from './telemetry/observe';
 import { PriceRegistry } from './telemetry/pricing';
 import { budgetStatus } from './telemetry/queries';
@@ -80,6 +83,30 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
   });
   const auth = new MonitorAuth(admin.password, config.monitor.sessionTtlMs);
 
+  const readTestCode = (value: string | undefined): string | undefined => {
+    if (!value) return undefined;
+    const code = value.trim().toUpperCase();
+    return TEST_CODE_RE.test(code) ? code : undefined;
+  };
+
+  /** Active pairing code only. A missing, unknown or ended code never attaches a task to some other session. */
+  const bindTask = (preset: ProviderPreset, testCode: string | undefined): TaskSnapshot => {
+    const run = testCode ? db.findActiveTestRunByCode(testCode) : null;
+    let modelConfigId: string | null = null;
+    try {
+      modelConfigId = db.upsertModelConfig(snapshotForPreset(preset, config, registry[preset].modelFor), new Date().toISOString());
+    } catch {
+      modelConfigId = null;
+    }
+    return {
+      testRunId: run?.testRunId ?? null,
+      environment: run?.environment ?? 'UNKNOWN',
+      networkType: run?.networkType ?? 'UNKNOWN',
+      noiseLevel: run?.noiseLevel ?? 'UNKNOWN',
+      modelConfigId,
+    };
+  };
+
   // ONE telemetry wrapper per preset: every provider path writes exactly one row per invocation.
   let budgetWarned = false;
   const observed = Object.fromEntries(
@@ -91,6 +118,7 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
         preset: p,
         providerName: registry[p].providerName,
         modelFor: registry[p].modelFor,
+        resolveTaskContext: (meta) => bindTask(p, meta.testCode),
         onRecorded: ({ preset, costUsd }) => {
           if (preset !== 'cloud' || costUsd === null || process.env.NODE_ENV === 'test') return;
           const b = budgetStatus(db);
@@ -157,6 +185,7 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
       direction: directionHeader.success ? directionHeader.data : undefined,
       feature: featureHeader === 'vocabulary' ? 'vocabulary' : undefined,
       cardId: cardId ?? undefined,
+      testCode: readTestCode(req.header('x-test-code')),
     };
     return { provider, meta, preset };
   }
@@ -318,6 +347,85 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
     }),
   );
 
+  // Application-level HTTP RTT. Authenticated by the researcher-issued test code, not the monitor password.
+  // The phone measures the GET; the POST only stores that client-observed number. No audio or text.
+  const rttWrites = new Map<string, number[]>();
+  const allowRttWrite = (code: string, now = Date.now()): boolean => {
+    const recent = (rttWrites.get(code) ?? []).filter((t) => now - t < 60_000);
+    const last = recent[recent.length - 1];
+    if (recent.length >= 20 || (last !== undefined && now - last < 4_000)) {
+      rttWrites.set(code, recent);
+      return false;
+    }
+    recent.push(now);
+    rttWrites.set(code, recent);
+    return true;
+  };
+  const noStore = (res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  };
+
+  app.get('/api/eval/ping', (req, res) => {
+    noStore(res);
+    if (!sameOrigin(req)) {
+      res.status(403).json({ error: { code: 'BAD_ORIGIN' } });
+      return;
+    }
+    const run = readTestCode(req.header('x-test-code'));
+    const session = run ? db.findActiveTestRunByCode(run) : null;
+    if (!session) {
+      res.status(401).json({ error: { code: 'BAD_TEST_CODE' } });
+      return;
+    }
+    db.touchTestRun(session.testRunId, new Date().toISOString());
+    const nonce = typeof req.query.n === 'string' ? req.query.n.slice(0, 80) : '';
+    res.json({ ok: true, nonce });
+  });
+
+  app.post('/api/eval/rtt', json, (req, res) => {
+    noStore(res);
+    if (!sameOrigin(req)) {
+      res.status(403).json({ error: { code: 'BAD_ORIGIN' } });
+      return;
+    }
+    const code = readTestCode(req.header('x-test-code'));
+    const session = code ? db.findActiveTestRunByCode(code) : null;
+    if (!session) {
+      res.status(401).json({ error: { code: 'BAD_TEST_CODE' } });
+      return;
+    }
+    const parsed = z.strictObject({ rttMs: z.number().finite().min(0).max(60_000), nonce: z.string().min(1).max(80) }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: { code: 'BAD_REQUEST' } });
+      return;
+    }
+    if (!allowRttWrite(session.code)) {
+      res.status(429).json({ error: { code: 'TOO_MANY_ATTEMPTS' } });
+      return;
+    }
+    try {
+      db.recordRtt({
+        testRunId: session.testRunId,
+        at: new Date().toISOString(),
+        rttMs: parsed.data.rttMs,
+        nonce: parsed.data.nonce,
+        environment: session.environment,
+        networkType: session.networkType,
+        noiseLevel: session.noiseLevel,
+      });
+    } catch (error) {
+      if (error instanceof Error && /UNIQUE/i.test(error.message)) {
+        res.status(204).end();
+        return;
+      }
+      res.status(500).json({ error: { category: 'SERVER' } });
+      return;
+    }
+    res.status(204).end();
+  });
+
   // Metadata-only evaluation events. The strict schema rejects any content-bearing field.
   app.post(
     '/api/events',
@@ -327,7 +435,7 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
       if (!body.success) throw new AppError('BAD_REQUEST', 'invalid events payload');
       store.add(body.data.events);
       try {
-        db.ingestEvents(body.data.events);
+        db.ingestEvents(body.data.events, (event) => bindTask(event.providerPreset, event.testCode));
       } catch {
         // Metadata logging must never break the translator.
       }

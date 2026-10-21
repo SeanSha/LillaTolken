@@ -1,5 +1,6 @@
 import type { Language } from '@kt/shared';
 import type { PromptId } from '../dialogue/types';
+import { setAudioSession } from './session';
 
 /**
  * Short static prompts. Spoken, so child operation does not depend on reading.
@@ -49,6 +50,7 @@ export class SpeechPrompts {
   private cancelCurrent: (() => void) | null = null;
 
   speak(id: PromptId, language: Language, hooks: SpeakHooks = {}): Promise<void> {
+    setAudioSession('playback');
     this.stop();
     return new Promise<void>((resolve) => {
       let done = false;

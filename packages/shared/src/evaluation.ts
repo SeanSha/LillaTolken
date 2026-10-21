@@ -55,6 +55,8 @@ export const EvalEventSchema = z.strictObject({
   inputPurpose: z.enum(['INITIAL', 'CLARIFICATION', 'CORRECTION']).optional(),
   segmentIndex: z.number().int().min(0).max(1000).optional(),
   playbackMs: z.number().min(0).optional(),
+  /** Pairing code for the researcher-issued test session. Not inferred. */
+  testCode: z.string().regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/).optional(),
 });
 
 export type EvalEvent = z.infer<typeof EvalEventSchema>;
@@ -80,4 +82,5 @@ export const EVAL_CSV_COLUMNS = [
   'inputPurpose',
   'segmentIndex',
   'playbackMs',
+  'testCode',
 ] as const satisfies readonly (keyof EvalEvent)[];

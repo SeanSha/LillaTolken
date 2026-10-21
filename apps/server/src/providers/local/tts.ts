@@ -106,7 +106,7 @@ export class LocalSpeechSynthesizer implements SpeechSynthesizer {
       const bytes = new Uint8Array(await fs.readFile(wavFile));
       if (bytes.length < 100) throw new AppError('TTS', 'empty audio from local TTS', 'LOCAL_TTS_ERROR');
       const durationMs = wavDurationMs(bytes);
-      meta.report?.({ engineInferenceMs: performance.now() - started, outputAudioMs: durationMs });
+      meta.report?.({ engineInferenceMs: performance.now() - started, outputAudioMs: durationMs, resolvedModel: 'macos_say', resolvedVoice: voice.name });
       return { bytes, mimeType: 'audio/wav', durationMs };
     });
   }

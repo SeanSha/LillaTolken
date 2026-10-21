@@ -13,7 +13,7 @@ import type { ServerConfig } from '../config';
 import type { EventStore } from '../evaluation/eventStore';
 import type { ProviderRegistry } from '../providers/registry';
 import type { TelemetryDb } from '../telemetry/db';
-import { annotationsCsv, requestsCsv, tasksCsv } from '../telemetry/export';
+import { annotationsCsv, comparisonCsv, requestsCsv, tasksCsv, testRunsCsv } from '../telemetry/export';
 import type { PriceRegistry } from '../telemetry/pricing';
 import * as q from '../telemetry/queries';
 import type { MonitorAuth } from './auth';
@@ -48,6 +48,11 @@ const FiltersSchema = z.object({
   model: z.string().max(200).optional(),
   status: z.string().max(20).optional(),
   scenarioId: z.string().max(100).optional(),
+  environment: z.enum(['HOME', 'OUTDOOR', 'UNKNOWN']).optional(),
+  networkType: z.enum(['WIFI', 'CELLULAR', 'UNKNOWN']).optional(),
+  noiseLevel: z.enum(['QUIET', 'MODERATE', 'NOISY', 'UNKNOWN']).optional(),
+  testRunId: z.string().regex(/^tr_[a-f0-9]{16}$/).optional(),
+  modelConfigId: z.string().regex(/^mc_[a-f0-9]{20}$/).optional(),
 });
 
 const PageSchema = z.object({
@@ -69,6 +74,23 @@ const AnnotationSchema = z.strictObject({
   // Short, adult-written observation. The UI warns not to type identifiable speech.
   note: z.string().max(280).nullish(),
 });
+
+const RunFields = {
+  label: z.string().trim().min(1).max(80),
+  environment: z.enum(['HOME', 'OUTDOOR']),
+  networkType: z.enum(['WIFI', 'CELLULAR', 'UNKNOWN']),
+  noiseLevel: z.enum(['QUIET', 'MODERATE', 'NOISY', 'UNKNOWN']),
+  notes: z.string().trim().max(500).nullish(),
+};
+
+const CreateRunSchema = z.strictObject(RunFields);
+const UpdateRunSchema = z.strictObject({
+  label: RunFields.label.optional(),
+  environment: RunFields.environment.optional(),
+  networkType: RunFields.networkType.optional(),
+  noiseLevel: RunFields.noiseLevel.optional(),
+  notes: RunFields.notes,
+}).refine((v) => Object.values(v).some((x) => x !== undefined), 'empty');
 
 const BudgetSchema = z.strictObject({
   enabled: z.boolean(),
@@ -255,8 +277,71 @@ export function createMonitorRouter(deps: MonitorDeps): Router {
     res.status(204).end();
   });
 
+  router.get('/api/monitor/test-runs', (_req, res) => {
+    res.json({ runs: db.listTestRuns() });
+  });
+
+  router.post('/api/monitor/test-runs', json, (req, res) => {
+    const parsed = CreateRunSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: { code: 'BAD_REQUEST' } });
+      return;
+    }
+    const run = db.createTestRun({
+      label: parsed.data.label,
+      environment: parsed.data.environment,
+      networkType: parsed.data.networkType,
+      noiseLevel: parsed.data.noiseLevel,
+      notes: parsed.data.notes?.trim() ? parsed.data.notes.trim() : null,
+      at: new Date().toISOString(),
+    });
+    res.status(201).json({ run, path: `/?eval=${run.code}` });
+  });
+
+  router.get('/api/monitor/test-runs/:testRunId', (req, res) => {
+    const run = db.getTestRun(String(req.params.testRunId));
+    if (!run) {
+      res.status(404).json({ error: { code: 'NOT_FOUND' } });
+      return;
+    }
+    res.json({ run });
+  });
+
+  router.patch('/api/monitor/test-runs/:testRunId', json, (req, res) => {
+    const parsed = UpdateRunSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: { code: 'BAD_REQUEST' } });
+      return;
+    }
+    const notes = parsed.data.notes === undefined ? undefined : parsed.data.notes?.trim() ? parsed.data.notes.trim() : null;
+    const run = db.updateTestRun(String(req.params.testRunId), { ...parsed.data, notes });
+    if (!run) {
+      const existing = db.getTestRun(String(req.params.testRunId));
+      res.status(existing ? 409 : 404).json({ error: { code: existing ? 'SESSION_ENDED' : 'NOT_FOUND' } });
+      return;
+    }
+    res.json({ run });
+  });
+
+  router.post('/api/monitor/test-runs/:testRunId/end', (req, res) => {
+    const run = db.endTestRun(String(req.params.testRunId), new Date().toISOString());
+    if (!run) {
+      res.status(404).json({ error: { code: 'NOT_FOUND' } });
+      return;
+    }
+    res.json({ run });
+  });
+
+  router.get('/api/monitor/model-configs', (_req, res) => {
+    res.json({ configs: db.listModelConfigs() });
+  });
+
+  router.get('/api/monitor/comparison', (req, res) => {
+    res.json(q.environmentComparison(db, parseFilters(req)));
+  });
+
   router.get('/api/monitor/export', (req, res) => {
-    const type = z.enum(['requests', 'tasks', 'annotations']).safeParse(req.query.type);
+    const type = z.enum(['requests', 'tasks', 'annotations', 'test-runs', 'comparison']).safeParse(req.query.type);
     const format = z.literal('csv').safeParse(req.query.format ?? 'csv');
     if (!type.success || !format.success) {
       res.status(400).json({ error: { code: 'BAD_REQUEST' } });
@@ -269,7 +354,11 @@ export function createMonitorRouter(deps: MonitorDeps): Router {
         ? requestsCsv(q.listRequests(db, filters, all).rows)
         : type.data === 'tasks'
           ? tasksCsv(q.listTasks(db, filters, all).rows)
-          : annotationsCsv(q.listAnnotations(db, filters, all).rows);
+          : type.data === 'annotations'
+            ? annotationsCsv(q.listAnnotations(db, filters, all).rows)
+            : type.data === 'test-runs'
+              ? testRunsCsv(db.listTestRuns())
+              : comparisonCsv(q.environmentComparison(db, filters));
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="kidstranslator-${type.data}.csv"`);
     res.send(csv);

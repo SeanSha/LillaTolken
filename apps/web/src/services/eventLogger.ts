@@ -6,6 +6,8 @@ type Options = {
   fetchImpl?: typeof fetch;
   getScenarioId?: () => string | undefined;
   getModelTag?: (preset: ProviderPreset) => string | undefined;
+  /** Researcher pairing code captured for this browser tab. Omitted when the phone is not paired. */
+  getTestCode?: () => string | undefined;
   /** Synchronous observer of every logged event (e.g. to learn the current task's context). */
   onLog?: (fields: LogFields) => void;
   /** Flush interval; events are small and infrequent. */
@@ -26,11 +28,13 @@ export class EventLogger {
 
   log = (fields: LogFields): void => {
     this.options.onLog?.(fields);
+    const testCode = this.options.getTestCode?.();
     const candidate: EvalEvent = {
       ts: new Date().toISOString(),
       version: APP_VERSION,
       scenarioId: this.options.getScenarioId?.(),
       modelTag: this.options.getModelTag?.(fields.providerPreset),
+      ...(testCode ? { testCode } : {}),
       ...fields,
     };
     const parsed = EvalEventSchema.safeParse(candidate);

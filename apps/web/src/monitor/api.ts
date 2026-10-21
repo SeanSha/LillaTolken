@@ -11,8 +11,11 @@ import type {
   Page,
   PricingResponse,
   SegmentRow,
+  ComparisonResponse,
+  ModelConfig,
   SummaryResponse,
   TaskRow,
+  TestRun,
   TimeseriesPoint,
   VocabularyUsageReport,
 } from '@kt/shared';
@@ -84,5 +87,13 @@ export const monitorApi = {
   annotationStats: (f: MonitorFilters) => call<AnnotationStats>(`/api/monitor/annotations/stats${toQuery(f)}`),
   saveAnnotation: (a: Record<string, unknown>) => call<void>('/api/monitor/annotations', json('POST', a)),
   clearData: () => call<void>('/api/monitor/data', json('DELETE', { confirm: 'DELETE' })),
-  exportUrl: (type: 'requests' | 'tasks' | 'annotations', f: MonitorFilters) => `/api/monitor/export${toQuery(f, { type, format: 'csv' })}`,
+  testRuns: () => call<{ runs: TestRun[] }>('/api/monitor/test-runs'),
+  createTestRun: (body: { label: string; environment: 'HOME' | 'OUTDOOR'; networkType: 'WIFI' | 'CELLULAR' | 'UNKNOWN'; noiseLevel: 'QUIET' | 'MODERATE' | 'NOISY' | 'UNKNOWN'; notes?: string | null }) =>
+    call<{ run: TestRun; path: string }>('/api/monitor/test-runs', json('POST', body)),
+  updateTestRun: (testRunId: string, body: { label?: string; environment?: 'HOME' | 'OUTDOOR'; networkType?: 'WIFI' | 'CELLULAR' | 'UNKNOWN'; noiseLevel?: 'QUIET' | 'MODERATE' | 'NOISY' | 'UNKNOWN'; notes?: string | null }) =>
+    call<{ run: TestRun }>(`/api/monitor/test-runs/${encodeURIComponent(testRunId)}`, json('PATCH', body)),
+  endTestRun: (testRunId: string) => call<{ run: TestRun }>(`/api/monitor/test-runs/${encodeURIComponent(testRunId)}/end`, { method: 'POST' }),
+  modelConfigs: () => call<{ configs: ModelConfig[] }>('/api/monitor/model-configs'),
+  comparison: (f: MonitorFilters) => call<ComparisonResponse>(`/api/monitor/comparison${toQuery(f)}`),
+  exportUrl: (type: 'requests' | 'tasks' | 'annotations' | 'test-runs' | 'comparison', f: MonitorFilters) => `/api/monitor/export${toQuery(f, { type, format: 'csv' })}`,
 };

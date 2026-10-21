@@ -70,8 +70,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     host: env.HOST || '127.0.0.1',
     openai: {
       apiKey: env.OPENAI_API_KEY?.trim() || undefined,
-      asrModel: env.OPENAI_ASR_MODEL || 'gpt-4o-transcribe',
-      llmModel: env.OPENAI_LLM_MODEL || 'gpt-4.1-mini',
+      asrModel: env.OPENAI_ASR_MODEL || 'gpt-transcribe',
+      llmModel: env.OPENAI_LLM_MODEL || 'gpt-6-luna',
       visionModel: env.OPENAI_VISION_MODEL || 'gpt-4.1-mini',
       ttsModel: env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
       ttsVoice: env.OPENAI_TTS_VOICE || 'alloy',

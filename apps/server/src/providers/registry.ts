@@ -23,7 +23,7 @@ export function createRegistry(config: ServerConfig, overrides: Partial<Provider
   return {
     mock: { bundle: createMockProvider(), modelTag: MOCK_MODEL_TAG, available: true, providerName: 'mock', modelFor: () => 'mock' },
     cloud: {
-      bundle: createCloudProvider(config.openai),
+      bundle: createCloudProvider(config.openai, { ffmpegBin: config.local.ffmpegBin, tmpRoot: config.local.tmpRoot }),
       modelTag: cloudModelTag(config.openai),
       available: hasKey,
       unavailableReason: hasKey ? undefined : 'OPENAI_API_KEY is not set on the server',

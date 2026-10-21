@@ -168,6 +168,11 @@ export function EvaluationTab() {
             <th>Updated</th>
             <th>Task</th>
             <th>Preset</th>
+            <th>Environment</th>
+            <th>Network</th>
+            <th>Noise</th>
+            <th>Test session</th>
+            <th>Model config</th>
             <th>Ref</th>
             <th>Meaning</th>
             <th>Understood</th>
@@ -182,6 +187,11 @@ export function EvaluationTab() {
               <td>{fmtTime(a.updatedAt)}</td>
               <td className="mono">{a.taskId.slice(0, 8)}</td>
               <td>{a.preset ?? '—'}</td>
+              <td>{a.environment ?? 'UNKNOWN'}</td>
+              <td>{a.networkType ?? 'UNKNOWN'}</td>
+              <td>{a.noiseLevel ?? 'UNKNOWN'}</td>
+              <td className="mono">{a.testRunId ?? '—'}</td>
+              <td className="mono">{a.modelConfigId ?? 'UNKNOWN'}</td>
               <td>{a.referenceMeaningCode ?? '—'}</td>
               <td>{a.meaningScore ?? '—'}</td>
               <td>{a.recipientUnderstood}</td>

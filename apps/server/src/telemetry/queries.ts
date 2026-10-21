@@ -7,10 +7,17 @@ import type {
   AnnotationStats,
   BudgetSettings,
   BudgetStatus,
+  ComparisonResponse,
+  ConditionComparison,
+  ConditionModelSplit,
   CostDetail,
   Direction,
+  DistributionMs,
+  EvalEnvironment,
+  EvalNetwork,
   EventRow,
   LatencyStats,
+  ModelConfig,
   ModelSummary,
   MonitorFilters,
   Page,
@@ -18,6 +25,7 @@ import type {
   ProviderPreset,
   RequestStatus,
   SegmentRow,
+  StageDistribution,
   StageSummary,
   SummaryResponse,
   TaskRow,
@@ -26,9 +34,9 @@ import type {
   VocabularyUsageReport,
   YesNoNA,
 } from '@kt/shared';
-import { AI_STAGES, PROVIDER_PRESETS, REQUEST_STATUSES } from '@kt/shared';
+import { AI_STAGES, P90_MIN_SAMPLES, PROVIDER_PRESETS, REQUEST_STATUSES } from '@kt/shared';
 import type { SQLInputValue } from 'node:sqlite';
-import type { TelemetryDb } from './db';
+import { asEnvironment, asNetwork, asNoise, type TelemetryDb } from './db';
 
 type Row = Record<string, unknown>;
 
@@ -36,6 +44,17 @@ export function percentile(sorted: readonly number[], p: number): number | null 
   if (sorted.length === 0) return null;
   const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
   return sorted[idx] ?? null;
+}
+
+/** Median for any non-empty sample. P90 only once there are enough samples to be meaningful. */
+export function distribution(values: readonly number[], p90Min = P90_MIN_SAMPLES): DistributionMs {
+  if (values.length === 0) return { count: 0, medianMs: null, p90Ms: null };
+  const sorted = [...values].sort((a, b) => a - b);
+  return {
+    count: sorted.length,
+    medianMs: percentile(sorted, 50),
+    p90Ms: sorted.length >= p90Min ? percentile(sorted, 90) : null,
+  };
 }
 
 export function latencyStats(values: readonly number[]): LatencyStats {
@@ -69,6 +88,11 @@ function requestWhere(f: MonitorFilters): Where {
   if (f.status) add('r.status = ?', f.status);
   if (f.scenarioId) add('t.scenario_id = ?', f.scenarioId);
   if (f.feature) add('r.feature = ?', f.feature);
+  if (f.environment) add('t.environment = ?', f.environment);
+  if (f.networkType) add('t.network_type = ?', f.networkType);
+  if (f.noiseLevel) add('t.noise_level = ?', f.noiseLevel);
+  if (f.testRunId) add('t.test_run_id = ?', f.testRunId);
+  if (f.modelConfigId) add('t.model_config_id = ?', f.modelConfigId);
   return { sql: parts.length ? `WHERE ${parts.join(' AND ')}` : '', params };
 }
 
@@ -88,6 +112,11 @@ function taskWhere(f: MonitorFilters): Where {
   if (f.stage) add('EXISTS (SELECT 1 FROM ai_requests x WHERE x.task_id = t.task_id AND x.stage = ?)', f.stage);
   if (f.model) add('EXISTS (SELECT 1 FROM ai_requests x WHERE x.task_id = t.task_id AND x.model_tag = ?)', f.model);
   if (f.feature) add('EXISTS (SELECT 1 FROM ai_requests x WHERE x.task_id = t.task_id AND x.feature = ?)', f.feature);
+  if (f.environment) add('t.environment = ?', f.environment);
+  if (f.networkType) add('t.network_type = ?', f.networkType);
+  if (f.noiseLevel) add('t.noise_level = ?', f.noiseLevel);
+  if (f.testRunId) add('t.test_run_id = ?', f.testRunId);
+  if (f.modelConfigId) add('t.model_config_id = ?', f.modelConfigId);
   return { sql: parts.length ? `WHERE ${parts.join(' AND ')}` : '', params };
 }
 
@@ -135,6 +164,12 @@ export function mapRequest(r: Row): AiRequestRow {
     priceRevision: str(r.price_revision),
     costDetail,
     retryOfRid: str(r.retry_of_rid),
+    testRunId: str(r.test_run_id),
+    environment: asEnvironment(r.environment),
+    networkType: asNetwork(r.network_type),
+    noiseLevel: asNoise(r.noise_level),
+    modelConfigId: str(r.model_config_id),
+    voice: str(r.voice),
   };
 }
 
@@ -184,6 +219,11 @@ export function mapTask(r: Row): TaskRow {
     costKnownUsd: r.cost_known as number,
     costUnknownRequests: r.cost_unknown as number,
     playbackCompleted: num(r.playback_ms) !== null,
+    testRunId: str(r.test_run_id),
+    environment: asEnvironment(r.environment),
+    networkType: asNetwork(r.network_type),
+    noiseLevel: asNoise(r.noise_level),
+    modelConfigId: str(r.model_config_id),
   };
 }
 
@@ -478,16 +518,28 @@ export type AnnotationInput = {
 };
 
 export function upsertAnnotation(db: TelemetryDb, a: AnnotationInput, at: Date = new Date()): boolean {
-  const task = db.get<{ scenario_id: string | null }>('SELECT scenario_id FROM tasks WHERE task_id = ?', a.taskId);
+  const task = db.get<{
+    scenario_id: string | null;
+    test_run_id: string | null;
+    environment: string | null;
+    network_type: string | null;
+    noise_level: string | null;
+    model_config_id: string | null;
+  }>('SELECT scenario_id, test_run_id, environment, network_type, noise_level, model_config_id FROM tasks WHERE task_id = ?', a.taskId);
   if (!task) return false;
   db.run(
-    `INSERT INTO annotations(task_id, scenario_id, reference_meaning_code, meaning_score, recipient_understood, asr_issue, ui_difficulty_count, note, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?)
+    `INSERT INTO annotations(task_id, scenario_id, reference_meaning_code, meaning_score, recipient_understood, asr_issue, ui_difficulty_count, note, updated_at, test_run_id, environment, network_type, noise_level, model_config_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
      ON CONFLICT(task_id) DO UPDATE SET
        scenario_id = excluded.scenario_id, reference_meaning_code = excluded.reference_meaning_code,
        meaning_score = excluded.meaning_score, recipient_understood = excluded.recipient_understood,
        asr_issue = excluded.asr_issue, ui_difficulty_count = excluded.ui_difficulty_count,
-       note = excluded.note, updated_at = excluded.updated_at`,
+       note = excluded.note, updated_at = excluded.updated_at,
+       test_run_id = COALESCE(annotations.test_run_id, excluded.test_run_id),
+       environment = COALESCE(annotations.environment, excluded.environment),
+       network_type = COALESCE(annotations.network_type, excluded.network_type),
+       noise_level = COALESCE(annotations.noise_level, excluded.noise_level),
+       model_config_id = COALESCE(annotations.model_config_id, excluded.model_config_id)`,
     a.taskId,
     a.scenarioId ?? task.scenario_id ?? null,
     a.referenceMeaningCode ?? null,
@@ -497,6 +549,11 @@ export function upsertAnnotation(db: TelemetryDb, a: AnnotationInput, at: Date =
     a.uiDifficultyCount ?? 0,
     a.note ?? null,
     at.toISOString(),
+    task.test_run_id,
+    asEnvironment(task.environment),
+    asNetwork(task.network_type),
+    asNoise(task.noise_level),
+    task.model_config_id,
   );
   return true;
 }
@@ -514,6 +571,11 @@ function mapAnnotation(r: Row): AnnotationRow {
     updatedAt: r.updated_at as string,
     preset: r.preset as ProviderPreset,
     direction: str(r.direction) as Direction | null,
+    testRunId: str(r.test_run_id),
+    environment: asEnvironment(r.environment),
+    networkType: asNetwork(r.network_type),
+    noiseLevel: asNoise(r.noise_level),
+    modelConfigId: str(r.model_config_id),
   };
 }
 
@@ -521,7 +583,19 @@ export function listAnnotations(db: TelemetryDb, f: MonitorFilters, page: PageOp
   const w = taskWhere(f);
   const from = `FROM annotations a JOIN tasks t ON t.task_id = a.task_id ${w.sql}`;
   const total = db.get<{ n: number }>(`SELECT COUNT(*) AS n ${from}`, ...w.params)?.n ?? 0;
-  const rows = db.all<Row>(`SELECT a.*, t.preset, t.direction ${from} ORDER BY a.updated_at DESC LIMIT ? OFFSET ?`, ...w.params, page.limit, page.offset);
+  const rows = db.all<Row>(
+    `SELECT a.task_id, a.scenario_id, a.reference_meaning_code, a.meaning_score, a.recipient_understood, a.asr_issue,
+            a.ui_difficulty_count, a.note, a.updated_at, t.preset, t.direction,
+            COALESCE(a.test_run_id, t.test_run_id) AS test_run_id,
+            COALESCE(a.environment, t.environment, 'UNKNOWN') AS environment,
+            COALESCE(a.network_type, t.network_type, 'UNKNOWN') AS network_type,
+            COALESCE(a.noise_level, t.noise_level, 'UNKNOWN') AS noise_level,
+            COALESCE(a.model_config_id, t.model_config_id) AS model_config_id
+     ${from} ORDER BY a.updated_at DESC LIMIT ? OFFSET ?`,
+    ...w.params,
+    page.limit,
+    page.offset,
+  );
   return { rows: rows.map(mapAnnotation), total, limit: page.limit, offset: page.offset };
 }
 
@@ -633,4 +707,223 @@ export function vocabularyUsage(db: TelemetryDb, f: MonitorFilters): VocabularyU
     cards,
     note: USAGE_NOTE,
   };
+}
+
+// ------------------------------------------------------------------ environment comparison
+
+const COMPARE_STAGES: AiStage[] = ['ASR', 'INTERPRET', 'TRANSLATE', 'TTS'];
+
+const COMPARE_NOTE =
+  'HOME + WIFI is compared with OUTDOOR + CELLULAR. Date, provider, direction, stage, model, status, noise, test session and model-configuration filters apply. The environment and network filters do not hide either column. HTTP RTT is the application-level round trip measured by the phone; it is not ASR, LLM or TTS processing time, signal strength, or pure network latency. P90 is omitted when a sample has fewer than 5 values. If a column mixes model configurations, headline latency is withheld and each configuration is listed on its own. Records without environment metadata stay UNKNOWN and are not placed in either column.';
+
+type TaskAgg = {
+  model_config_id: string | null;
+  status: string;
+  preset: string;
+  elapsed: number | null;
+  recorded_ms: number;
+};
+
+type ReqAgg = {
+  model_config_id: string | null;
+  stage: string;
+  status: string;
+  duration_ms: number;
+  preset: string;
+  cost_usd: number | null;
+  cost_basis: string;
+  model_tag: string;
+  voice: string | null;
+};
+
+const countsAsReal = (preset: string, f: MonitorFilters) => preset !== 'mock' || f.preset === 'mock';
+
+function elapsedOf(tasks: readonly TaskAgg[], f: MonitorFilters): DistributionMs {
+  return distribution(
+    tasks
+      .filter((t) => t.status === 'delivered' && countsAsReal(t.preset, f) && t.elapsed !== null)
+      .map((t) => t.elapsed as number),
+  );
+}
+
+function stagesOf(rows: readonly ReqAgg[], f: MonitorFilters): StageDistribution[] {
+  return COMPARE_STAGES.map((stage) => ({
+    stage,
+    ...distribution(rows.filter((r) => r.stage === stage && r.status === 'succeeded' && countsAsReal(r.preset, f)).map((r) => r.duration_ms)),
+  }));
+}
+
+function costOf(rows: readonly ReqAgg[]) {
+  const cloud = rows.filter((r) => r.preset === 'cloud');
+  let known = 0;
+  let estimated = 0;
+  let unknown = 0;
+  for (const r of cloud) {
+    if (typeof r.cost_usd !== 'number' || !Number.isFinite(r.cost_usd)) unknown += 1;
+    else {
+      known += r.cost_usd;
+      if (r.cost_basis === 'estimated') estimated += r.cost_usd;
+    }
+  }
+  return { costKnownUsd: known, costEstimatedUsd: estimated, costUnknownRequests: unknown, cloudRequests: cloud.length };
+}
+
+function withhold(d: DistributionMs): DistributionMs {
+  return { count: d.count, medianMs: null, p90Ms: null };
+}
+
+function splitFor(configId: string | null, tasks: readonly TaskAgg[], reqs: readonly ReqAgg[], config: ModelConfig | null, f: MonitorFilters): ConditionModelSplit {
+  const voices = [...new Set(reqs.map((r) => r.voice).filter((v): v is string => Boolean(v)))].sort();
+  const models = new Map<string, { stage: AiStage; modelTag: string; requests: number }>();
+  for (const r of reqs) {
+    if (!COMPARE_STAGES.includes(r.stage as AiStage)) continue;
+    const key = `${r.stage}|${r.model_tag}`;
+    const found = models.get(key);
+    if (found) found.requests += 1;
+    else models.set(key, { stage: r.stage as AiStage, modelTag: r.model_tag, requests: 1 });
+  }
+  return {
+    modelConfigId: configId,
+    config,
+    taskCount: tasks.length,
+    requestCount: reqs.length,
+    tasksDelivered: tasks.filter((t) => t.status === 'delivered').length,
+    tasksFailed: tasks.filter((t) => t.status === 'failed').length,
+    taskElapsed: elapsedOf(tasks, f),
+    stages: stagesOf(reqs, f),
+    recordedAudioMs: tasks.reduce((sum, t) => sum + t.recorded_ms, 0),
+    ...costOf(reqs),
+    requestModels: [...models.values()],
+    requestVoices: voices,
+  };
+}
+
+function rttValues(db: TelemetryDb, f: MonitorFilters, environment: EvalEnvironment, network: EvalNetwork): number[] {
+  const parts = ['h.environment = ?', 'h.network_type = ?'];
+  const params: SQLInputValue[] = [environment, network];
+  if (f.from) {
+    parts.push('h.measured_at >= ?');
+    params.push(f.from);
+  }
+  if (f.to) {
+    parts.push('h.measured_at <= ?');
+    params.push(f.to);
+  }
+  if (f.testRunId) {
+    parts.push('h.test_run_id = ?');
+    params.push(f.testRunId);
+  }
+  if (f.noiseLevel) {
+    parts.push('h.noise_level = ?');
+    params.push(f.noiseLevel);
+  }
+  if (f.modelConfigId) {
+    parts.push('EXISTS (SELECT 1 FROM tasks t WHERE t.test_run_id = h.test_run_id AND t.model_config_id = ?)');
+    params.push(f.modelConfigId);
+  }
+  if (f.preset) {
+    parts.push('EXISTS (SELECT 1 FROM tasks t WHERE t.test_run_id = h.test_run_id AND t.preset = ? AND t.environment = ? AND t.network_type = ?)');
+    params.push(f.preset, environment, network);
+  }
+  return db.all<{ rtt_ms: number }>(`SELECT h.rtt_ms AS rtt_ms FROM http_rtt h WHERE ${parts.join(' AND ')}`, ...params).map((r) => r.rtt_ms);
+}
+
+function condition(
+  db: TelemetryDb,
+  base: MonitorFilters,
+  environment: 'HOME' | 'OUTDOOR',
+  network: 'WIFI' | 'CELLULAR',
+  key: ConditionComparison['key'],
+  label: string,
+): ConditionComparison {
+  const filters: MonitorFilters = { ...base, environment, networkType: network };
+  const tw = taskWhere(filters);
+  const tasks: TaskAgg[] = db
+    .all<Row>(
+      `SELECT t.model_config_id, t.status, t.preset, t.task_elapsed_ms, t.started_at, t.ended_at,
+              (SELECT COALESCE(SUM(s.captured_duration_ms), 0) FROM segments s WHERE s.task_id = t.task_id) AS recorded_ms
+       FROM tasks t ${tw.sql}`,
+      ...tw.params,
+    )
+    .map((r) => {
+      const stored = num(r.task_elapsed_ms);
+      const ended = str(r.ended_at);
+      const computed = ended ? Math.max(0, Date.parse(ended) - Date.parse(r.started_at as string)) : null;
+      return {
+        model_config_id: str(r.model_config_id),
+        status: r.status as string,
+        preset: r.preset as string,
+        elapsed: stored ?? (computed !== null && Number.isFinite(computed) ? computed : null),
+        recorded_ms: num(r.recorded_ms) ?? 0,
+      };
+    });
+  const rw = requestWhere(filters);
+  const reqs: ReqAgg[] = db
+    .all<Row>(
+      `SELECT r.model_config_id, r.stage, r.status, r.duration_ms, r.preset, r.cost_usd, r.cost_basis, r.model_tag, r.voice
+       FROM ai_requests r JOIN tasks t ON t.task_id = r.task_id ${rw.sql}`,
+      ...rw.params,
+    )
+    .map((r) => ({
+      model_config_id: str(r.model_config_id),
+      stage: r.stage as string,
+      status: r.status as string,
+      duration_ms: r.duration_ms as number,
+      preset: r.preset as string,
+      cost_usd: num(r.cost_usd),
+      cost_basis: String(r.cost_basis ?? ''),
+      model_tag: String(r.model_tag ?? ''),
+      voice: str(r.voice),
+    }));
+
+  const ids = [...new Set(tasks.map((t) => t.model_config_id))];
+  const splits = ids.map((id) =>
+    splitFor(
+      id,
+      tasks.filter((t) => t.model_config_id === id),
+      reqs.filter((r) => r.model_config_id === id),
+      id ? db.getModelConfig(id) : null,
+      filters,
+    ),
+  );
+  const configsDiffer = ids.length > 1;
+  const elapsed = elapsedOf(tasks, filters);
+  const stages = stagesOf(reqs, filters);
+  return {
+    key,
+    label,
+    environment,
+    networkType: network,
+    taskCount: tasks.length,
+    requestCount: reqs.length,
+    tasksDelivered: tasks.filter((t) => t.status === 'delivered').length,
+    tasksFailed: tasks.filter((t) => t.status === 'failed').length,
+    tasksCancelled: tasks.filter((t) => t.status === 'cancelled').length,
+    tasksActive: tasks.filter((t) => t.status === 'active').length,
+    configsDiffer,
+    taskElapsed: configsDiffer ? withhold(elapsed) : elapsed,
+    stages: configsDiffer ? stages.map((s) => ({ ...s, ...withhold(s) })) : stages,
+    httpRtt: distribution(rttValues(db, base, environment, network)),
+    recordedAudioMs: tasks.reduce((sum, t) => sum + t.recorded_ms, 0),
+    ...costOf(reqs),
+    splits,
+  };
+}
+
+export function environmentComparison(db: TelemetryDb, f: MonitorFilters, now: Date = new Date()): ComparisonResponse {
+  const base: MonitorFilters = { ...baseFilters(f) };
+  return {
+    generatedAt: now.toISOString(),
+    p90MinSamples: P90_MIN_SAMPLES,
+    note: COMPARE_NOTE,
+    homeWifi: condition(db, base, 'HOME', 'WIFI', 'HOME_WIFI', 'HOME + WIFI'),
+    outdoorCellular: condition(db, base, 'OUTDOOR', 'CELLULAR', 'OUTDOOR_CELLULAR', 'OUTDOOR + CELLULAR'),
+  };
+}
+
+function baseFilters(f: MonitorFilters): MonitorFilters {
+  const next = { ...f };
+  delete next.environment;
+  delete next.networkType;
+  return next;
 }

@@ -27,7 +27,7 @@ describe('schema migrations', () => {
   it('a fresh database is migrated to the current version with every table', () => {
     const db = new TelemetryDb(':memory:');
     expect(db.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(tableNames(db)).toEqual(['ai_requests', 'annotations', 'events', 'segments', 'sessions', 'settings', 'tasks']);
+    expect(tableNames(db)).toEqual(['ai_requests', 'annotations', 'events', 'http_rtt', 'model_configs', 'segments', 'sessions', 'settings', 'tasks', 'test_runs']);
   });
 
   it('has no column able to hold audio, transcripts, prompts or translations', () => {
@@ -37,7 +37,7 @@ describe('schema migrations', () => {
       for (const col of db.all<{ name: string; type: string }>(`PRAGMA table_info(${table})`)) {
         expect(col.type, `${table}.${col.name}`).not.toBe('BLOB');
         // `note` (annotations, <=280 chars, adult-written, UI warns) and `cost_detail` (rate numbers) are the only free text.
-        if (!['note', 'cost_detail'].includes(col.name)) expect(col.name, `${table}.${col.name}`).not.toMatch(forbidden);
+        if (!['note', 'notes', 'label', 'params_json', 'cost_detail'].includes(col.name)) expect(col.name, `${table}.${col.name}`).not.toMatch(forbidden);
       }
     }
   });

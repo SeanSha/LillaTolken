@@ -4,11 +4,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import type { CostDetail, Direction, EvalEvent, ProviderPreset } from '@kt/shared';
+import { randomBytes, randomInt } from 'node:crypto';
+import type { CostDetail, Direction, EvalEvent, EvalEnvironment, EvalNetwork, EvalNoise, ModelConfig, ProviderPreset, TaskSnapshot, TestRun } from '@kt/shared';
+import { TEST_CODE_ALPHABET } from '@kt/shared';
 import type { AiRequestRow } from '@kt/shared';
+import type { ModelConfigSnapshot } from './modelConfig';
+import { stableModelConfigId } from './modelConfig';
 
 /** Bump with a new entry in MIGRATIONS. Migrations are additive and never drop user data. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -127,13 +131,102 @@ const MIGRATIONS: Record<number, string> = {
     CREATE INDEX idx_req_feature ON ai_requests(feature);
     CREATE INDEX idx_req_card ON ai_requests(card_id);
   `,
+  3: `
+    CREATE TABLE test_runs (
+      test_run_id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      environment TEXT NOT NULL,
+      network_type TEXT NOT NULL,
+      noise_level TEXT NOT NULL,
+      notes TEXT,
+      status TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      last_seen_at TEXT
+    );
+    CREATE TABLE model_configs (
+      model_config_id TEXT PRIMARY KEY,
+      preset TEXT NOT NULL,
+      asr_provider TEXT NOT NULL,
+      asr_model TEXT NOT NULL,
+      interpret_provider TEXT NOT NULL,
+      interpret_model TEXT NOT NULL,
+      translate_provider TEXT NOT NULL,
+      translate_model TEXT NOT NULL,
+      tts_provider TEXT NOT NULL,
+      tts_model TEXT NOT NULL,
+      tts_voice TEXT,
+      params_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE http_rtt (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      test_run_id TEXT NOT NULL,
+      measured_at TEXT NOT NULL,
+      rtt_ms REAL NOT NULL,
+      nonce TEXT NOT NULL,
+      environment TEXT NOT NULL,
+      network_type TEXT NOT NULL,
+      noise_level TEXT NOT NULL,
+      UNIQUE(test_run_id, nonce)
+    );
+    ALTER TABLE tasks ADD COLUMN test_run_id TEXT;
+    ALTER TABLE tasks ADD COLUMN environment TEXT NOT NULL DEFAULT 'UNKNOWN';
+    ALTER TABLE tasks ADD COLUMN network_type TEXT NOT NULL DEFAULT 'UNKNOWN';
+    ALTER TABLE tasks ADD COLUMN noise_level TEXT NOT NULL DEFAULT 'UNKNOWN';
+    ALTER TABLE tasks ADD COLUMN model_config_id TEXT;
+    ALTER TABLE ai_requests ADD COLUMN test_run_id TEXT;
+    ALTER TABLE ai_requests ADD COLUMN environment TEXT NOT NULL DEFAULT 'UNKNOWN';
+    ALTER TABLE ai_requests ADD COLUMN network_type TEXT NOT NULL DEFAULT 'UNKNOWN';
+    ALTER TABLE ai_requests ADD COLUMN noise_level TEXT NOT NULL DEFAULT 'UNKNOWN';
+    ALTER TABLE ai_requests ADD COLUMN model_config_id TEXT;
+    ALTER TABLE ai_requests ADD COLUMN voice TEXT;
+    ALTER TABLE annotations ADD COLUMN test_run_id TEXT;
+    ALTER TABLE annotations ADD COLUMN environment TEXT;
+    ALTER TABLE annotations ADD COLUMN network_type TEXT;
+    ALTER TABLE annotations ADD COLUMN noise_level TEXT;
+    ALTER TABLE annotations ADD COLUMN model_config_id TEXT;
+    CREATE INDEX idx_tasks_test_run ON tasks(test_run_id);
+    CREATE INDEX idx_tasks_env ON tasks(environment, network_type, noise_level);
+    CREATE INDEX idx_tasks_model_cfg ON tasks(model_config_id);
+    CREATE INDEX idx_req_test_run ON ai_requests(test_run_id);
+    CREATE INDEX idx_rtt_run ON http_rtt(test_run_id, measured_at);
+    CREATE INDEX idx_runs_status ON test_runs(status, started_at);
+  `,
 };
 
-export type NewRequest = Omit<AiRequestRow, 'rid' | 'callIndex' | 'retryOfRid' | 'costDetail' | 'feature' | 'cardId' | 'language'> & {
+export type NewRequest = Omit<
+  AiRequestRow,
+  | 'rid'
+  | 'callIndex'
+  | 'retryOfRid'
+  | 'costDetail'
+  | 'feature'
+  | 'cardId'
+  | 'language'
+  | 'voice'
+  | 'testRunId'
+  | 'environment'
+  | 'networkType'
+  | 'noiseLevel'
+  | 'modelConfigId'
+> & {
   costDetail: CostDetail | null;
   feature?: AiRequestRow['feature'];
   cardId?: string | null;
   language?: 'zh' | 'sv' | null;
+  voice?: string | null;
+  /** Applied only when this call creates the task. An existing task keeps its snapshot. */
+  taskContext?: TaskSnapshot | null;
+};
+
+const EMPTY_SNAPSHOT: TaskSnapshot = {
+  testRunId: null,
+  environment: 'UNKNOWN',
+  networkType: 'UNKNOWN',
+  noiseLevel: 'UNKNOWN',
+  modelConfigId: null,
 };
 
 const nul = <T>(v: T | undefined): T | null => (v === undefined ? null : v);
@@ -216,7 +309,10 @@ export class TelemetryDb {
     );
   }
 
-  /** Creates the task row if a request/event arrives first. Existing rows are only enriched, never overwritten. */
+  /**
+   * Creates the task row if a request/event arrives first. Existing rows are only enriched
+   * (direction / scenario). The evaluation snapshot is written on INSERT and never updated.
+   */
   ensureTask(t: {
     taskId: string;
     sessionId: string;
@@ -224,11 +320,13 @@ export class TelemetryDb {
     direction?: Direction | null;
     scenarioId?: string | null;
     startedAt: string;
+    taskContext?: TaskSnapshot | null;
   }): void {
     this.ensureSession(t.sessionId, t.startedAt);
+    const snap = t.taskContext ?? EMPTY_SNAPSHOT;
     this.run(
-      `INSERT INTO tasks(task_id, session_id, scenario_id, preset, direction, started_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO tasks(task_id, session_id, scenario_id, preset, direction, started_at, test_run_id, environment, network_type, noise_level, model_config_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(task_id) DO UPDATE SET
          direction = COALESCE(tasks.direction, excluded.direction),
          scenario_id = COALESCE(tasks.scenario_id, excluded.scenario_id)`,
@@ -238,7 +336,30 @@ export class TelemetryDb {
       t.preset,
       nul(t.direction),
       t.startedAt,
+      snap.testRunId,
+      snap.environment,
+      snap.networkType,
+      snap.noiseLevel,
+      snap.modelConfigId,
     );
+  }
+
+  taskSnapshot(taskId: string): TaskSnapshot {
+    const row = this.get<{
+      test_run_id: string | null;
+      environment: string | null;
+      network_type: string | null;
+      noise_level: string | null;
+      model_config_id: string | null;
+    }>('SELECT test_run_id, environment, network_type, noise_level, model_config_id FROM tasks WHERE task_id = ?', taskId);
+    if (!row) return { ...EMPTY_SNAPSHOT };
+    return {
+      testRunId: row.test_run_id,
+      environment: asEnvironment(row.environment),
+      networkType: asNetwork(row.network_type),
+      noiseLevel: asNoise(row.noise_level),
+      modelConfigId: row.model_config_id,
+    };
   }
 
   // ---------------------------------------------------------------- AI requests
@@ -252,7 +373,9 @@ export class TelemetryDb {
         preset: r.preset,
         direction: r.direction,
         startedAt: r.startedAt,
+        taskContext: r.taskContext,
       });
+      const snap = this.taskSnapshot(r.taskId);
       const prior = this.get<{ n: number }>(
         'SELECT COUNT(*) AS n FROM ai_requests WHERE request_id = ? AND stage = ? AND task_id = ?',
         r.requestId,
@@ -275,8 +398,9 @@ export class TelemetryDb {
            rid, request_id, call_index, task_id, session_id, segment_id, started_at, ended_at, preset, stage,
            direction, provider_name, model_tag, duration_ms, engine_inference_ms, conversion_ms, model_load_ms,
            input_audio_ms, output_audio_ms, prompt_tokens, output_tokens, cached_prompt_tokens, status, error_code,
-           cost_usd, cost_basis, price_revision, cost_detail, retry_of_rid, feature, card_id, language)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           cost_usd, cost_basis, price_revision, cost_detail, retry_of_rid, feature, card_id, language,
+           test_run_id, environment, network_type, noise_level, model_config_id, voice)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         rid,
         r.requestId,
         callIndex,
@@ -309,21 +433,31 @@ export class TelemetryDb {
         r.feature ?? 'translate',
         nul(r.cardId),
         nul(r.language),
+        snap.testRunId,
+        snap.environment,
+        snap.networkType,
+        snap.noiseLevel,
+        snap.modelConfigId,
+        nul(r.voice),
       );
+      if (snap.testRunId) this.touchTestRun(snap.testRunId, r.endedAt);
       return rid;
     });
   }
 
   // ---------------------------------------------------------------- client events
 
-  /** Folds the metadata-only client events into task/segment rows and keeps the raw event rows. */
-  ingestEvents(events: readonly EvalEvent[]): void {
+  /**
+   * Folds the metadata-only client events into task/segment rows and keeps the raw event rows.
+   * `resolveContext` is called when a task row may be created. Its result is stored only on INSERT.
+   */
+  ingestEvents(events: readonly EvalEvent[], resolveContext?: (event: EvalEvent) => TaskSnapshot | null): void {
     this.transaction(() => {
-      for (const e of events) this.ingestOne(e);
+      for (const e of events) this.ingestOne(e, resolveContext);
     });
   }
 
-  private ingestOne(e: EvalEvent): void {
+  private ingestOne(e: EvalEvent, resolveContext?: (event: EvalEvent) => TaskSnapshot | null): void {
     this.ensureSession(e.sessionId, e.ts);
     this.run(
       `INSERT INTO events(ts, session_id, task_id, preset, event_type, direction, scenario_id, model_tag, stage,
@@ -368,9 +502,12 @@ export class TelemetryDb {
       direction: e.direction,
       scenarioId: e.scenarioId,
       startedAt: e.ts,
+      taskContext: resolveContext?.(e) ?? null,
     });
 
     if (e.eventType === 'TASK_STARTED') {
+      const bound = this.taskSnapshot(taskId);
+      if (bound.testRunId) this.touchTestRun(bound.testRunId, e.ts);
       // The event is authoritative for the start time (a request may have created the row earlier).
       this.run('UPDATE tasks SET started_at = MIN(started_at, ?) WHERE task_id = ?', e.ts, taskId);
     }
@@ -429,6 +566,133 @@ export class TelemetryDb {
     this.run('UPDATE tasks SET last_event_type = ? WHERE task_id = ?', e.eventType, taskId);
   }
 
+  // ---------------------------------------------------------------- test sessions / model configs / RTT
+
+  createTestRun(input: {
+    label: string;
+    environment: TestRun['environment'];
+    networkType: TestRun['networkType'];
+    noiseLevel: TestRun['noiseLevel'];
+    notes: string | null;
+    at: string;
+  }): TestRun {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const testRunId = `tr_${randomBytes(8).toString('hex')}`;
+      const code = newTestCode();
+      try {
+        this.run(
+          `INSERT INTO test_runs(test_run_id, code, label, environment, network_type, noise_level, notes, status, started_at)
+           VALUES (?,?,?,?,?,?,?,'active',?)`,
+          testRunId,
+          code,
+          input.label,
+          input.environment,
+          input.networkType,
+          input.noiseLevel,
+          input.notes,
+          input.at,
+        );
+        return this.getTestRun(testRunId)!;
+      } catch (error) {
+        if (!isUnique(error) || attempt === 4) throw error;
+      }
+    }
+    throw new Error('could not allocate a test session code');
+  }
+
+  listTestRuns(): TestRun[] {
+    return this.all<RunRow>('SELECT * FROM test_runs ORDER BY started_at DESC, test_run_id ASC LIMIT 200').map(mapRun);
+  }
+
+  getTestRun(testRunId: string): TestRun | null {
+    const row = this.get<RunRow>('SELECT * FROM test_runs WHERE test_run_id = ?', testRunId);
+    return row ? mapRun(row) : null;
+  }
+
+  findActiveTestRunByCode(code: string): TestRun | null {
+    const row = this.get<RunRow>(`SELECT * FROM test_runs WHERE code = ? AND status = 'active'`, code);
+    return row ? mapRun(row) : null;
+  }
+
+  /** Updates conditions on an active session. Ended sessions and existing tasks are left untouched. */
+  updateTestRun(
+    testRunId: string,
+    patch: Partial<Pick<TestRun, 'label' | 'environment' | 'networkType' | 'noiseLevel' | 'notes'>>,
+  ): TestRun | null {
+    const current = this.getTestRun(testRunId);
+    if (!current || current.status !== 'active') return null;
+    this.run(
+      `UPDATE test_runs SET label = ?, environment = ?, network_type = ?, noise_level = ?, notes = ? WHERE test_run_id = ? AND status = 'active'`,
+      patch.label ?? current.label,
+      patch.environment ?? current.environment,
+      patch.networkType ?? current.networkType,
+      patch.noiseLevel ?? current.noiseLevel,
+      patch.notes !== undefined ? patch.notes : current.notes,
+      testRunId,
+    );
+    return this.getTestRun(testRunId);
+  }
+
+  endTestRun(testRunId: string, at: string): TestRun | null {
+    const current = this.getTestRun(testRunId);
+    if (!current) return null;
+    if (current.status === 'active') {
+      this.run(`UPDATE test_runs SET status = 'ended', ended_at = ? WHERE test_run_id = ? AND status = 'active'`, at, testRunId);
+    }
+    return this.getTestRun(testRunId);
+  }
+
+  touchTestRun(testRunId: string, at: string): void {
+    this.run('UPDATE test_runs SET last_seen_at = ? WHERE test_run_id = ?', at, testRunId);
+  }
+
+  upsertModelConfig(snapshot: ModelConfigSnapshot, at: string): string {
+    const id = stableModelConfigId(snapshot);
+    this.run(
+      `INSERT OR IGNORE INTO model_configs(
+         model_config_id, preset, asr_provider, asr_model, interpret_provider, interpret_model,
+         translate_provider, translate_model, tts_provider, tts_model, tts_voice, params_json, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      id,
+      snapshot.preset,
+      snapshot.asrProvider,
+      snapshot.asrModel,
+      snapshot.interpretProvider,
+      snapshot.interpretModel,
+      snapshot.translateProvider,
+      snapshot.translateModel,
+      snapshot.ttsProvider,
+      snapshot.ttsModel,
+      snapshot.ttsVoice,
+      JSON.stringify(snapshot.params),
+      at,
+    );
+    return id;
+  }
+
+  getModelConfig(id: string): ModelConfig | null {
+    const row = this.get<ConfigRow>('SELECT * FROM model_configs WHERE model_config_id = ?', id);
+    return row ? mapConfig(row) : null;
+  }
+
+  listModelConfigs(): ModelConfig[] {
+    return this.all<ConfigRow>('SELECT * FROM model_configs ORDER BY created_at DESC LIMIT 200').map(mapConfig);
+  }
+
+  /** Client-observed HTTP round trip. The value is the phone's measurement, not server processing time. */
+  recordRtt(sample: { testRunId: string; at: string; rttMs: number; nonce: string; environment: EvalEnvironment; networkType: EvalNetwork; noiseLevel: EvalNoise }): void {
+    this.run(
+      `INSERT INTO http_rtt(test_run_id, measured_at, rtt_ms, nonce, environment, network_type, noise_level) VALUES (?,?,?,?,?,?,?)`,
+      sample.testRunId,
+      sample.at,
+      sample.rttMs,
+      sample.nonce,
+      sample.environment,
+      sample.networkType,
+      sample.noiseLevel,
+    );
+  }
+
   // ---------------------------------------------------------------- settings / housekeeping
 
   getSetting(key: string): string | undefined {
@@ -442,11 +706,110 @@ export class TelemetryDb {
   /** "Clear Adult Test Data": removes every pilot row (settings such as the budget are kept). */
   clearAll(): void {
     this.transaction(() => {
-      for (const table of ['annotations', 'segments', 'ai_requests', 'events', 'tasks', 'sessions']) {
+      for (const table of ['http_rtt', 'annotations', 'segments', 'ai_requests', 'events', 'tasks', 'sessions', 'test_runs', 'model_configs']) {
         this.run(`DELETE FROM ${table}`);
       }
     });
     this.timeoutPending.clear();
     this.raw.exec('VACUUM');
   }
+}
+
+function newTestCode(): string {
+  let code = '';
+  for (let i = 0; i < 8; i++) code += TEST_CODE_ALPHABET[randomInt(TEST_CODE_ALPHABET.length)]!;
+  return code;
+}
+
+function isUnique(error: unknown): boolean {
+  return error instanceof Error && /UNIQUE/i.test(error.message);
+}
+
+export function asEnvironment(value: unknown): EvalEnvironment {
+  return value === 'HOME' || value === 'OUTDOOR' ? value : 'UNKNOWN';
+}
+
+export function asNetwork(value: unknown): EvalNetwork {
+  return value === 'WIFI' || value === 'CELLULAR' ? value : 'UNKNOWN';
+}
+
+export function asNoise(value: unknown): EvalNoise {
+  return value === 'QUIET' || value === 'MODERATE' || value === 'NOISY' ? value : 'UNKNOWN';
+}
+
+type RunRow = {
+  test_run_id: string;
+  code: string;
+  label: string;
+  environment: string;
+  network_type: string;
+  noise_level: string;
+  notes: string | null;
+  status: string;
+  started_at: string;
+  ended_at: string | null;
+  last_seen_at: string | null;
+};
+
+function mapRun(row: RunRow): TestRun {
+  return {
+    testRunId: row.test_run_id,
+    code: row.code,
+    label: row.label,
+    environment: row.environment === 'OUTDOOR' ? 'OUTDOOR' : 'HOME',
+    networkType: row.network_type === 'CELLULAR' || row.network_type === 'UNKNOWN' ? row.network_type : 'WIFI',
+    noiseLevel: row.noise_level === 'QUIET' || row.noise_level === 'MODERATE' || row.noise_level === 'NOISY' || row.noise_level === 'UNKNOWN' ? row.noise_level : 'UNKNOWN',
+    notes: row.notes,
+    status: row.status === 'ended' ? 'ended' : 'active',
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    lastSeenAt: row.last_seen_at,
+  };
+}
+
+type ConfigRow = {
+  model_config_id: string;
+  preset: string;
+  asr_provider: string;
+  asr_model: string;
+  interpret_provider: string;
+  interpret_model: string;
+  translate_provider: string;
+  translate_model: string;
+  tts_provider: string;
+  tts_model: string;
+  tts_voice: string | null;
+  params_json: string;
+  created_at: string;
+};
+
+function mapConfig(row: ConfigRow): ModelConfig {
+  let params: ModelConfig['params'] = {};
+  try {
+    const parsed = JSON.parse(row.params_json) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      params = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null) params[key] = value;
+      }
+    }
+  } catch {
+    params = {};
+  }
+  const preset: ProviderPreset = row.preset === 'cloud' || row.preset === 'local' || row.preset === 'mock' ? row.preset : 'mock';
+  return {
+    modelConfigId: row.model_config_id,
+    preset,
+    asrProvider: row.asr_provider,
+    asrModel: row.asr_model,
+    interpretProvider: row.interpret_provider,
+    interpretModel: row.interpret_model,
+    translateProvider: row.translate_provider,
+    translateModel: row.translate_model,
+    ttsProvider: row.tts_provider,
+    ttsModel: row.tts_model,
+    ttsVoice: row.tts_voice,
+    params,
+    createdAt: row.created_at,
+  };
 }

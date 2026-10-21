@@ -262,7 +262,7 @@ function DataControls() {
     <section>
       <h3>Export &amp; data</h3>
       <p>
-        {(['requests', 'tasks', 'annotations'] as const).map((t) => (
+        {(['requests', 'tasks', 'annotations', 'test-runs', 'comparison'] as const).map((t) => (
           <a key={t} className="mon-btn" href={monitorApi.exportUrl(t, resolve())} download>
             Export {t} CSV
           </a>
@@ -271,7 +271,7 @@ function DataControls() {
       <p className="mon-note">Exports follow the current filters and contain metadata only (no audio, transcripts, prompts, translations).</p>
       <div className="mon-danger">
         <b>Clear adult test data</b>
-        <p>Deletes every request, task, event and annotation, plus the evaluation event log. Cannot be undone. Type DELETE to confirm.</p>
+        <p>Deletes every request, task, event, annotation, test session and model-configuration row, plus the evaluation event log. Cannot be undone. Type DELETE to confirm.</p>
         <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="DELETE" aria-label="Type DELETE to confirm" />{' '}
         <button type="button" disabled={confirm !== 'DELETE'} onClick={() => void clear()}>
           Delete all data

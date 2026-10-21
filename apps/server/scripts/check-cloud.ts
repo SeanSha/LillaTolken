@@ -13,7 +13,7 @@ if (!config.openai.apiKey) {
   process.exit(2);
 }
 
-const provider = createCloudProvider(config.openai);
+const provider = createCloudProvider(config.openai, { ffmpegBin: config.local.ffmpegBin, tmpRoot: config.local.tmpRoot });
 const meta = (n: number) => ({ taskId: 'smoke', requestId: `smoke-${n}` });
 const results: Array<{ stage: string; ms: number; ok: boolean; note: string }> = [];
 

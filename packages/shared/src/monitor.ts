@@ -55,6 +55,14 @@ export type AiRequestRow = {
   /** Rate inputs used for the calculation (numbers/units only). */
   costDetail: CostDetail | null;
   retryOfRid: string | null;
+  /** Copied from the task snapshot when the row is written. */
+  testRunId: string | null;
+  environment: EvalEnvironment;
+  networkType: EvalNetwork;
+  noiseLevel: EvalNoise;
+  modelConfigId: string | null;
+  /** Actual TTS voice for this call, when reported. */
+  voice: string | null;
 };
 
 export type CostDetail = {
@@ -93,6 +101,12 @@ export type TaskRow = {
   costKnownUsd: number;
   costUnknownRequests: number;
   playbackCompleted: boolean;
+  /** Immutable snapshot taken when the task row was created. */
+  testRunId: string | null;
+  environment: EvalEnvironment;
+  networkType: EvalNetwork;
+  noiseLevel: EvalNoise;
+  modelConfigId: string | null;
 };
 
 export type SegmentRow = {
@@ -116,6 +130,124 @@ export type EventRow = {
 
 export type Page<T> = { rows: T[]; total: number; limit: number; offset: number };
 
+/** Stored on a task. Missing history is UNKNOWN — never guessed as HOME or WIFI. */
+export const EVAL_ENVIRONMENTS = ['HOME', 'OUTDOOR', 'UNKNOWN'] as const;
+export type EvalEnvironment = (typeof EVAL_ENVIRONMENTS)[number];
+export const EVAL_NETWORKS = ['WIFI', 'CELLULAR', 'UNKNOWN'] as const;
+export type EvalNetwork = (typeof EVAL_NETWORKS)[number];
+export const EVAL_NOISE_LEVELS = ['QUIET', 'MODERATE', 'NOISY', 'UNKNOWN'] as const;
+export type EvalNoise = (typeof EVAL_NOISE_LEVELS)[number];
+
+/** Values the researcher must pick when starting a session. Environment is never left to inference. */
+export const TEST_ENVIRONMENTS = ['HOME', 'OUTDOOR'] as const;
+export const TEST_NETWORKS = ['WIFI', 'CELLULAR', 'UNKNOWN'] as const;
+export const TEST_NOISE_LEVELS = ['QUIET', 'MODERATE', 'NOISY', 'UNKNOWN'] as const;
+
+/** Unambiguous alphabet (no 0/O/1/I). The phone pairs by sending this code, not by a global active session. */
+export const TEST_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const TEST_CODE_RE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/;
+
+/** P90 is withheld below this many samples. Median is shown for any non-empty sample. */
+export const P90_MIN_SAMPLES = 5;
+
+export type TaskSnapshot = {
+  testRunId: string | null;
+  environment: EvalEnvironment;
+  networkType: EvalNetwork;
+  noiseLevel: EvalNoise;
+  modelConfigId: string | null;
+};
+
+export type TestRunStatus = 'active' | 'ended';
+
+export type TestRun = {
+  testRunId: string;
+  code: string;
+  label: string;
+  environment: 'HOME' | 'OUTDOOR';
+  networkType: 'WIFI' | 'CELLULAR' | 'UNKNOWN';
+  noiseLevel: 'QUIET' | 'MODERATE' | 'NOISY' | 'UNKNOWN';
+  notes: string | null;
+  status: TestRunStatus;
+  startedAt: string;
+  endedAt: string | null;
+  /** Last time a paired phone started a task, sent a request, or completed an RTT probe. */
+  lastSeenAt: string | null;
+};
+
+export type ModelConfig = {
+  modelConfigId: string;
+  preset: ProviderPreset;
+  asrProvider: string;
+  asrModel: string;
+  interpretProvider: string;
+  interpretModel: string;
+  translateProvider: string;
+  translateModel: string;
+  ttsProvider: string;
+  ttsModel: string;
+  ttsVoice: string | null;
+  /** Non-secret parameters only (temperature, context size, prompt version). */
+  params: Record<string, string | number | boolean | null>;
+  createdAt: string;
+};
+
+export type DistributionMs = { count: number; medianMs: number | null; p90Ms: number | null };
+
+export type StageDistribution = DistributionMs & { stage: AiStage };
+
+export type ConditionModelSplit = {
+  modelConfigId: string | null;
+  config: ModelConfig | null;
+  taskCount: number;
+  requestCount: number;
+  tasksDelivered: number;
+  tasksFailed: number;
+  taskElapsed: DistributionMs;
+  stages: StageDistribution[];
+  recordedAudioMs: number;
+  costKnownUsd: number;
+  costEstimatedUsd: number;
+  costUnknownRequests: number;
+  cloudRequests: number;
+  /** Distinct model tags actually stored on requests, so a fallback stays visible. */
+  requestModels: Array<{ stage: AiStage; modelTag: string; requests: number }>;
+  requestVoices: string[];
+};
+
+export type ConditionComparison = {
+  key: 'HOME_WIFI' | 'OUTDOOR_CELLULAR';
+  label: string;
+  environment: 'HOME' | 'OUTDOOR';
+  networkType: 'WIFI' | 'CELLULAR';
+  taskCount: number;
+  requestCount: number;
+  tasksDelivered: number;
+  tasksFailed: number;
+  tasksCancelled: number;
+  tasksActive: number;
+  /** True when the bucket contains more than one model configuration. Headline latency is then withheld. */
+  configsDiffer: boolean;
+  taskElapsed: DistributionMs;
+  stages: StageDistribution[];
+  /** Application-level HTTP round trip. Not ASR/LLM/TTS latency and not signal strength. */
+  httpRtt: DistributionMs;
+  recordedAudioMs: number;
+  costKnownUsd: number;
+  costEstimatedUsd: number;
+  costUnknownRequests: number;
+  cloudRequests: number;
+  splits: ConditionModelSplit[];
+};
+
+export type ComparisonResponse = {
+  generatedAt: string;
+  p90MinSamples: number;
+  note: string;
+  homeWifi: ConditionComparison;
+  outdoorCellular: ConditionComparison;
+};
+
 export type MonitorFilters = {
   from?: string;
   to?: string;
@@ -126,6 +258,11 @@ export type MonitorFilters = {
   status?: string;
   scenarioId?: string;
   feature?: AiFeature;
+  environment?: EvalEnvironment;
+  networkType?: EvalNetwork;
+  noiseLevel?: EvalNoise;
+  testRunId?: string;
+  modelConfigId?: string;
 };
 
 export type LatencyStats = { count: number; avgMs: number | null; medianMs: number | null; p95Ms: number | null };
@@ -230,6 +367,12 @@ export type AnnotationRow = {
   // joined, read-only
   preset?: ProviderPreset;
   direction?: Direction | null;
+  /** Copied from the task snapshot. Missing history stays UNKNOWN. */
+  testRunId?: string | null;
+  environment?: EvalEnvironment;
+  networkType?: EvalNetwork;
+  noiseLevel?: EvalNoise;
+  modelConfigId?: string | null;
 };
 
 export type AnnotationStats = {

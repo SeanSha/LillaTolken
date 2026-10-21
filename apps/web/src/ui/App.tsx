@@ -4,6 +4,7 @@ import { fileInputProps } from '../vocabulary/capture';
 import { useActor } from '@xstate/react';
 import { otherDirection } from '@kt/shared';
 import { dialogueMachine, logger, mockScript, refreshHealth } from '../services/runtime';
+import { startRttProbe } from '../services/testSession';
 import { screenOf, type Screen } from '../dialogue/selectors';
 import { rememberPreset, startingPreset } from '../services/presetPreference';
 import { settings } from '../services/settings';
@@ -49,7 +50,11 @@ export function App() {
     if (!(fromUrl && fromUrl !== presetAtStart) && (presetAtStart !== 'mock' || fromUrl)) rememberPreset(presetAtStart);
     const flush = () => void logger.flush();
     window.addEventListener('pagehide', flush);
-    return () => window.removeEventListener('pagehide', flush);
+    const stopProbe = startRttProbe();
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      stopProbe();
+    };
   }, [presetAtStart]);
 
   const props = { snap, send };

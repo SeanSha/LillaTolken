@@ -51,6 +51,9 @@ export function TasksTab() {
               <th>taskId</th>
               <th>Direction</th>
               <SortTh label="Provider" field="preset" sort={sort} order={order} onSort={onSort} />
+              <th>Environment</th>
+              <th>Network</th>
+              <th>Noise</th>
               <th>Segments</th>
               <SortTh label="Recorded" field="recordedMs" sort={sort} order={order} onSort={onSort} />
               <th>ASR</th>
@@ -73,6 +76,9 @@ export function TasksTab() {
                 <td className="mono">{t.taskId}</td>
                 <td>{t.direction ? t.direction.replace('_TO_', '→') : '—'}</td>
                 <td>{t.preset}</td>
+                <td>{t.environment}</td>
+                <td>{t.networkType}</td>
+                <td>{t.noiseLevel}</td>
                 <td>{t.segmentCount}</td>
                 <td>{fmtMs(t.recordedMs)}</td>
                 <td>{t.asrCalls}</td>
@@ -92,7 +98,7 @@ export function TasksTab() {
             ))}
             {d && d.rows.length === 0 && (
               <tr>
-                <td colSpan={17} className="mon-empty">
+                <td colSpan={20} className="mon-empty">
                   No tasks match these filters.
                 </td>
               </tr>
@@ -121,6 +127,11 @@ function TaskDetailView({ taskId }: { taskId: string }) {
         rows={[
           ['Direction', t.direction ? DIRECTION_LABEL[t.direction] : '—'],
           ['Provider (frozen)', t.preset],
+          ['Environment', t.environment],
+          ['Network', t.networkType],
+          ['Noise', t.noiseLevel],
+          ['Test session', t.testRunId ?? '—'],
+          ['Model configuration', t.modelConfigId ?? 'UNKNOWN'],
           ['Outcome', `${t.status}${t.deliveryMode ? ` · ${t.deliveryMode}` : ''}`],
           ['Scenario', t.scenarioId ?? '—'],
           ['Elapsed (user pauses, prompts, playback included)', fmtMs(t.taskElapsedMs)],

@@ -8,6 +8,7 @@ import { createDialogueMachine } from '../dialogue/machine';
 import type { Recorder } from '../dialogue/types';
 import { createApiBundle, fetchHealth, type Health, type RequestContext } from './apiClient';
 import { EventLogger } from './eventLogger';
+import { captureTestCodeFromUrl, getTestCode } from './testSession';
 import { settings } from './settings';
 
 export const audioStore = new AudioStore();
@@ -34,7 +35,10 @@ export const setActivePreset = (preset: ProviderPreset) => {
 };
 
 // Fetch preset availability + non-secret model tags as early as possible (used in evaluation logs).
-if (typeof window !== 'undefined') void refreshHealth();
+if (typeof window !== 'undefined') {
+  captureTestCodeFromUrl();
+  void refreshHealth();
+}
 
 // Non-content telemetry context for backend requests: which session/direction the CURRENT task
 // belongs to. Learned from the machine's own TASK_STARTED event; applied only to that task id.
@@ -44,11 +48,12 @@ export const logger = new EventLogger({
   onLog: (fields) => {
     if (fields.eventType === 'TASK_STARTED' && fields.taskId) {
       taskContext.clear(); // only the current task matters
-      taskContext.set(fields.taskId, { sessionId: fields.sessionId, direction: fields.direction });
+      taskContext.set(fields.taskId, { sessionId: fields.sessionId, direction: fields.direction, testCode: getTestCode() });
     }
   },
   getScenarioId: () => settings.get().scenarioId.trim() || (activePreset === 'mock' ? mockScript.scenarioId : undefined),
   getModelTag: (preset) => health?.presets[preset]?.modelTag,
+  getTestCode,
 });
 
 const bundles = new Map<ProviderPreset, ProviderBundle>();

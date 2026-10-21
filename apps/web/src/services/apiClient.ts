@@ -26,7 +26,7 @@ const DEFAULT_TIMEOUT_MS = 45_000;
 
 type FetchLike = typeof fetch;
 
-export type RequestContext = { sessionId?: string; direction?: Direction };
+export type RequestContext = { sessionId?: string; direction?: Direction; testCode?: string };
 
 export type ApiClientOptions = {
   baseUrl?: string;
@@ -48,6 +48,7 @@ function headersFor(
     'X-Request-Id': meta.requestId,
     ...(context?.sessionId ? { 'X-Session-Id': context.sessionId } : {}),
     ...(context?.direction ? { 'X-Direction': context.direction } : {}),
+    ...(context?.testCode ? { 'X-Test-Code': context.testCode } : {}),
     ...(meta.feature ? { 'X-Feature': meta.feature } : {}),
     ...(meta.cardId ? { 'X-Card-Id': meta.cardId } : {}),
     ...extra,

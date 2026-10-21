@@ -32,6 +32,9 @@ label { display: inline-flex; flex-direction: column; gap: 2px; font-size: 12px;
 .mon-empty { color: #98a2b3; padding: 12px; text-align: center; }
 .mon-row { display: flex; justify-content: space-between; align-items: center; }
 
+.mon-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+.mon-compare .mon-card h4 { margin: 0 0 6px; }
+.mon-compare .mon-card p { margin: 4px 0; font-size: 13px; }
 .mon-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
 .mon-chart { margin: 0; background: #fff; border: 1px solid #e3e6ec; border-radius: 8px; padding: 8px 10px; }
 .mon-chart figcaption { font-size: 12px; font-weight: 600; margin-bottom: 4px; }

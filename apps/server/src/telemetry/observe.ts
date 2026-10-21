@@ -20,6 +20,7 @@ import {
   type RequestStatus,
   type SpeechRecognizer,
   type SpeechSynthesizer,
+  type TaskSnapshot,
   type TranslateInput,
 } from '@kt/shared';
 import type { TelemetryDb } from './db';
@@ -35,6 +36,11 @@ export type ObserveOptions = {
   modelFor: (stage: AiStage) => string;
   /** Called after a row was written (e.g. soft budget alert). Must not throw. */
   onRecorded?: (info: { preset: ProviderPreset; costUsd: number | null }) => void;
+  /**
+   * Snapshot for a task that does not exist yet. Ignored when the task row is already stored.
+   * Must not throw.
+   */
+  resolveTaskContext?: (meta: RequestMeta) => TaskSnapshot | null;
   now?: () => number; // monotonic ms (tests)
   clock?: () => Date;
 };
@@ -46,6 +52,23 @@ function classify(error: unknown, meta: RequestMeta): RequestStatus {
 }
 
 const finite = (n: number | undefined): number | undefined => (n !== undefined && Number.isFinite(n) ? n : undefined);
+
+const MODEL_RE = /^[A-Za-z0-9_.:/=+-]{1,200}$/;
+
+/** Drops anything that is not a model id, including strings that look like credentials. */
+export function cleanModel(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  if (/sk-|api[_-]?key|bearer|secret/i.test(value)) return fallback;
+  return MODEL_RE.test(value) ? value : fallback;
+}
+
+export function cleanVoice(value: string | undefined): string | null {
+  if (!value) return null;
+  const voice = value.trim();
+  if (voice.length === 0 || voice.length > 80) return null;
+  if (/[\r\n]/.test(voice) || /sk-|api[_-]?key|bearer|secret/i.test(voice)) return null;
+  return voice;
+}
 
 /** Direction can be missing from headers: infer it from what the stage itself implies. */
 export function inferDirection(stage: AiStage, meta: RequestMeta, hint?: { language?: Language; direction?: Direction }): Direction | null {
@@ -86,7 +109,8 @@ export function observeBundle(bundle: ProviderBundle, o: ObserveOptions): Provid
       // Telemetry must never disturb the request: swallow its own failures, keep the original outcome.
       try {
         const durationMs = Math.max(0, mono() - t0);
-        const model = o.modelFor(stage);
+        const model = cleanModel(usage.resolvedModel, o.modelFor(stage));
+        const taskContext = o.resolveTaskContext?.(meta) ?? null;
         const cost = o.prices.calculate({
           preset: o.preset,
           providerName: o.providerName,
@@ -127,6 +151,8 @@ export function observeBundle(bundle: ProviderBundle, o: ObserveOptions): Provid
             feature: meta.feature ?? 'translate',
             cardId: meta.cardId ?? null,
             language: hint.language ?? null,
+            voice: cleanVoice(usage.resolvedVoice),
+            taskContext,
           });
         }
         o.onRecorded?.({ preset: o.preset, costUsd: cost.costUsd });

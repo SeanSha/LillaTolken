@@ -22,6 +22,7 @@ import { mapFetchError, msFromNs, timeoutSignal } from './common';
 import type { LocalConfig } from './config';
 
 type OllamaChatResponse = {
+  model?: string;
   message?: { content?: string };
   prompt_eval_count?: number;
   eval_count?: number;
@@ -71,11 +72,13 @@ export class LocalDialogueModel implements DialogueModel {
     // load, so compute time excludes it and the (cold-start) load time is reported separately.
     const totalMs = msFromNs(data.total_duration);
     const loadMs = msFromNs(data.load_duration);
+    const echoed = typeof data.model === 'string' && data.model.length > 0 ? data.model : this.cfg.ollama.model;
     meta.report?.({
       promptTokens: data.prompt_eval_count,
       outputTokens: data.eval_count,
       engineInferenceMs: totalMs === undefined ? undefined : Math.max(0, totalMs - (loadMs ?? 0)),
       modelLoadMs: loadMs,
+      resolvedModel: `ollama:${echoed}`,
     });
     return parseJson(data.message?.content);
   }
