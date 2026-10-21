@@ -134,6 +134,8 @@ describe('PriceRegistry file handling', () => {
     expect(reg.calculate(cloud({ model: 'gpt-4o-transcribe', stage: 'ASR', usage: { inputAudioMs: 60_000 } })).costUsd).toBeCloseTo(0.006, 10);
     const luna = reg.calculate(cloud({ model: 'gpt-6-luna', stage: 'TRANSLATE', usage: { promptTokens: 485, cachedPromptTokens: 0, outputTokens: 28 } }));
     expect(luna.costUsd).toBeCloseTo((485 * 0.1 + 28 * 0.5) / 1e6, 12);
+    const identify = reg.calculate(cloud({ model: 'gpt-6-luna', stage: 'IDENTIFY', usage: { promptTokens: 800, cachedPromptTokens: 0, outputTokens: 40 } }));
+    expect(identify.costUsd).toBeCloseTo((800 * 0.1 + 40 * 0.5) / 1e6, 12);
     expect(reg.calculate(cloud({ model: 'gpt-transcribe', stage: 'ASR', usage: { inputAudioMs: 60_000 } })).costUsd).toBeCloseTo(0.0045, 10);
     const realtime = reg.calculate(cloud({
       model: 'gpt-realtime-2.1-mini',

@@ -110,27 +110,59 @@ UI rules:
 
 ```mermaid
 flowchart TD
-  I[Idle] --> R[Record segment]
-  R --> S[Continue or Finished?]
-  S -->|Continue| R
-  S -->|Finished| A[Transcribe ordered segments]
-  A --> D{Direction?}
-  D -->|Swedish → Chinese| T[Translate]
-  D -->|Chinese → Swedish| P[Interpret meaning]
-  P --> Q{Material ambiguity?}
-  Q -->|Yes; questions < 3| C[Ask short clarification]
-  C --> CR[Record answer]
-  CR --> P
-  Q -->|Still unclear at cap| F[Restart / Cancel]
-  Q -->|No| M[Confirm proposed meaning]
-  M -->|No| X[Record correction, within limit]
-  X --> P
-  M -->|Yes| T
-  T --> O[Result and audio]
-  O -->|Delivery complete| I
+  idle[Idle]
+  rec["Recording<br/>prompt, then listen up to 30 s"]
+  seg[Continue or finished]
+  asr[Transcribe segments in order]
+  miss[Didn't hear]
+  interp[Interpret Chinese]
+  ask[Ask one short question]
+  confirm[Confirm the proposed meaning]
+  tr[Translate]
+  play[Show the result and speak it]
+  done[Delivered]
+  err[Recoverable error]
+  stop[Stop and offer a restart]
+  sw[Cancel and switch direction?]
+
+  idle -->|START_TASK| rec
+  rec -->|stop or 30 s| seg
+  seg -->|CONTINUE_SPEAKING| rec
+  seg -->|FINISH_INPUT| asr
+  asr -->|ZH to SV| interp
+  asr -->|SV to ZH| tr
+  asr -->|empty, retries left| miss
+  miss -->|RETRY| rec
+  asr -->|empty at the cap| stop
+  interp -->|meaning is clear| confirm
+  interp -->|ambiguous, under 3 questions| ask
+  ask -->|child answers| rec
+  interp -->|still unclear, or a 4th question| stop
+  confirm -->|CONFIRM_YES| tr
+  confirm -->|CONFIRM_NO, under 2 corrections| rec
+  confirm -->|CONFIRM_NO at the cap| stop
+  tr --> play
+  play -->|playback finished| done
+  play -->|speech failed, adult accepts text| done
+  done -->|NEW_TURN| idle
+  done -->|another turn or the other direction| rec
+  rec -->|recorder failure| err
+  asr -->|other recognition failure| err
+  interp -->|failure| err
+  tr -->|failure| err
+  err -->|RETRY recording| rec
+  err -->|RETRY recognition| asr
+  err -->|RETRY interpretation| interp
+  err -->|RETRY translation| tr
+  stop -->|RESTART, same direction| rec
+  rec -.->|direction change during the task| sw
+  seg -.-> sw
+  asr -.-> sw
+  sw -->|SWITCH_YES, drop this task| rec
+  sw -->|SWITCH_NO, keep the checkpoint| seg
 ```
 
-Implement **one** XState v5 machine with `setup`, typed `context` and events, `assign`, guards, and invoked async actors. Add globally reachable `confirmingSwitch`, `recoverableError`, and `fallback` states; the diagram only shows the main path. Reuse recording components for INITIAL, CLARIFICATION, and CORRECTION rather than building separate apps.
+This is the one XState v5 machine in `apps/web/src/dialogue/machine.ts`. Recording is one state for the first utterance, a clarification answer, and a correction. A question, a confirmation, and the result each synthesize speech before the child answers; if that speech fails, the text stays on screen. `RETRY` from a recoverable error returns to the stage that failed: recognition, interpretation, translation, or recording when nothing was kept. `CANCEL` on an unfinished task returns to Idle and does not update the last delivered message. A direction change during the task always asks first. Idle and Delivered start the new direction without that question. Photo vocabulary is a separate flow and does not enter this machine.
 
 ### 4.3 Essential policy
 

@@ -3,7 +3,7 @@
 import OpenAI from 'openai';
 import { AppError, type NormalizedUsage, type VocabularyIdentifyResponse } from '@kt/shared';
 import type { ServerConfig } from '../config';
-import { mapOpenAIError } from '../providers/cloud';
+import { dialogueTemperature, mapOpenAIError } from '../providers/cloud';
 import { parseJson } from '../providers/dialogueParsing';
 import type { VocabularyImage } from './image';
 import { normalizeVocabularyModelOutput } from './normalize';
@@ -92,7 +92,7 @@ export function createVocabularyIdentifier(cfg: OpenAIConfig): VocabularyIdentif
                 schema: VOCABULARY_RESPONSE_SCHEMA,
               },
             },
-            ...(cfg.temperature === undefined ? {} : { temperature: cfg.temperature }),
+            ...dialogueTemperature(cfg.visionModel, cfg.temperature),
           },
           { signal, timeout: timeoutMs },
         );

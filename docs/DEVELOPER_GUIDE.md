@@ -60,7 +60,7 @@ OPENAI_API_KEY=sk-...
 | `OPENAI_ASR_MODEL` | `gpt-transcribe` | 语音识别。该模型用 `languages`，不再接受旧的单个 `language` 字段 |
 | `OPENAI_LLM_MODEL` | `gpt-6-luna` | 理解 + 翻译(严格 JSON schema)。默认推理强度为 medium |
 | `OPENAI_TTS_MODEL` / `OPENAI_TTS_VOICE` | `gpt-realtime-2.1-mini` / `alloy` | 语音合成。Realtime 只接收译文文本并返回 WAV。改回 `gpt-4o-mini-tts` 即用原来的 Speech 接口(mp3) |
-| `OPENAI_LLM_TEMPERATURE` | `0` | `gpt-6-luna` 的对话请求会自动省略该参数(默认推理强度会拒绝 `temperature`)。识图和其他非 GPT-6 模型仍会发送 |
+| `OPENAI_LLM_TEMPERATURE` | `0` | `gpt-6-luna` 的对话和识图请求会自动省略该参数(默认推理强度会拒绝 `temperature`)。其他模型仍会发送 |
 | `PROMPT_MEMORY` | `on` | 是否把"上一条已送达消息"作为可选上下文发给 LLM;Cloud/Local 对比时保持一致 |
 
 > 默认模型 ID 是按写代码时的认知设置的,**我没有用真实账号验证它们当前对你的账号可用**。如果报错,请在 `.env` 中改成你账号可用的模型。模型与提示词版本会写入评估日志的 `modelTag`,保证成人测试可复现。
@@ -230,7 +230,7 @@ npm run launcher:install      # 在桌面生成 "小翻译 启动.app"、"小翻
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `OLLAMA_VISION_MODEL` | `qwen3-vl:8b` | 本地识图。必须是已经 `ollama pull` 的视觉模型。超时默认 120 秒 |
-| `OPENAI_VISION_MODEL` | `gpt-4.1-mini` | 云端识图,必须支持图像输入。识别超时至少 45 秒,不受更短的 `OPENAI_TIMEOUT_MS` 影响 |
+| `OPENAI_VISION_MODEL` | `gpt-6-luna` | 云端识图,走 Responses API,必须支持图像输入。识别超时至少 45 秒,不受更短的 `OPENAI_TIMEOUT_MS` 影响 |
 | `VOCABULARY_DB_PATH` | `apps/server/data/vocabulary.sqlite` | 家庭词库的词语和文件路径。不要和监控库混用 |
 | `VOCABULARY_MEDIA_DIR` | `apps/server/data/vocabulary-media` | 照片和朗读文件。数据库里不放图片字节 |
 

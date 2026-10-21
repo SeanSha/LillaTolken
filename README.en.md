@@ -88,18 +88,23 @@ The child chooses a direction first. Speaking Chinese for a Swedish listener, an
 Once the speech is understood, it translates directly. The screen shows the original Swedish and the Chinese together, and reads the Chinese aloud. This direction does not ask a follow-up question and does not ask for confirmation.
 
 ```mermaid
-flowchart LR
-  A[Press and speak] --> B[Understand]
-  B --> C{Chinese to Swedish?}
-  C -->|Yes, meaning is clear| D[Yes or no]
-  C -->|Yes, not clear| E[Ask one small question]
+flowchart TD
+  A[Press and speak] --> B{Is this short turn finished?}
+  B -->|Say a bit more| A
+  B -->|Finished| C[Understand]
+  C -->|Not heard, tries left| A
+  C -->|Still not heard| Z[Stop and start over]
+  C -->|Chinese, meaning is clear| D{Yes or no?}
+  C -->|Chinese, not clear| E[Ask one small question]
   E --> A
+  C -->|Still unclear after the questions| Z
   D -->|Yes| F[Swedish text and voice]
-  D -->|No| A
-  C -->|Swedish to Chinese| G[Chinese text and voice]
+  D -->|No, a correction is allowed| A
+  D -->|Still no after the corrections| Z
+  C -->|Swedish| G[Chinese text and voice]
 ```
 
-If something was said wrong, not heard, or the direction should change, the turn can stop and start again. The translation can be replayed, or spoken once more in the same direction.
+A wrong or unheard turn can be tried again. When the allowed tries are used up, the turn stops instead of guessing. Changing direction in the middle first asks whether to abandon this turn. The translation can be replayed, or spoken once more in the same direction.
 
 ## Photo vocabulary
 
