@@ -22,6 +22,17 @@ export type NormalizedUsage = {
   promptTokens?: number;
   outputTokens?: number;
   cachedPromptTokens?: number;
+  /**
+   * Modality split for models that bill text and audio tokens at different rates
+   * (Realtime TTS). Totals above stay in promptTokens / outputTokens for the dashboard.
+   */
+  inputTextTokens?: number;
+  inputAudioTokens?: number;
+  inputImageTokens?: number;
+  outputTextTokens?: number;
+  outputAudioTokens?: number;
+  cachedTextTokens?: number;
+  cachedAudioTokens?: number;
   /** ASR/TTS audio durations (media time, NOT processing time). */
   inputAudioMs?: number;
   outputAudioMs?: number;

@@ -135,6 +135,26 @@ describe('PriceRegistry file handling', () => {
     const luna = reg.calculate(cloud({ model: 'gpt-6-luna', stage: 'TRANSLATE', usage: { promptTokens: 485, cachedPromptTokens: 0, outputTokens: 28 } }));
     expect(luna.costUsd).toBeCloseTo((485 * 0.1 + 28 * 0.5) / 1e6, 12);
     expect(reg.calculate(cloud({ model: 'gpt-transcribe', stage: 'ASR', usage: { inputAudioMs: 60_000 } })).costUsd).toBeCloseTo(0.0045, 10);
+    const realtime = reg.calculate(cloud({
+      model: 'gpt-realtime-2.1-mini',
+      stage: 'TTS',
+      usage: {
+        promptTokens: 120,
+        outputTokens: 210,
+        inputTextTokens: 100,
+        inputAudioTokens: 20,
+        inputImageTokens: 0,
+        cachedTextTokens: 40,
+        cachedAudioTokens: 5,
+        outputTextTokens: 10,
+        outputAudioTokens: 200,
+      },
+    }));
+    // (60*0.6 + 40*0.06) + (15*10 + 5*0.3) + 10*2.4 + 200*20
+    expect(realtime.costUsd).toBeCloseTo((36 + 2.4 + 150 + 1.5 + 24 + 4000) / 1e6, 12);
+    expect(realtime.costBasis).toBe('reported_usage');
+    expect(reg.calculate(cloud({ model: 'gpt-realtime-2.1-mini', stage: 'TTS', usage: { promptTokens: 10, outputTokens: 10 } })).costUsd).toBeNull();
+    expect(reg.calculate(cloud({ model: 'gpt-4o-mini-tts', stage: 'TTS', usage: { promptTokens: 100, outputTokens: 50 } })).costUsd).toBeCloseTo((100 * 0.6 + 50 * 12) / 1e6, 12);
     expect(reg.describe().editableOnlyOnServer).toBe(true);
   });
 });

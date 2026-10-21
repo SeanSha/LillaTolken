@@ -59,7 +59,7 @@ OPENAI_API_KEY=sk-...
 |---|---|---|
 | `OPENAI_ASR_MODEL` | `gpt-transcribe` | 语音识别。该模型用 `languages`，不再接受旧的单个 `language` 字段 |
 | `OPENAI_LLM_MODEL` | `gpt-6-luna` | 理解 + 翻译(严格 JSON schema)。默认推理强度为 medium |
-| `OPENAI_TTS_MODEL` / `OPENAI_TTS_VOICE` | `gpt-4o-mini-tts` / `alloy` | 语音合成(mp3,iOS 可播放) |
+| `OPENAI_TTS_MODEL` / `OPENAI_TTS_VOICE` | `gpt-realtime-2.1-mini` / `alloy` | 语音合成。Realtime 只接收译文文本并返回 WAV。改回 `gpt-4o-mini-tts` 即用原来的 Speech 接口(mp3) |
 | `OPENAI_LLM_TEMPERATURE` | `0` | `gpt-6-luna` 的对话请求会自动省略该参数(默认推理强度会拒绝 `temperature`)。识图和其他非 GPT-6 模型仍会发送 |
 | `PROMPT_MEMORY` | `on` | 是否把"上一条已送达消息"作为可选上下文发给 LLM;Cloud/Local 对比时保持一致 |
 

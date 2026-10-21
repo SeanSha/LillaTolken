@@ -133,3 +133,11 @@ Setup, phone access, the on-Mac engines, and the monitoring panel are in the [de
 
 - [Developer guide](docs/DEVELOPER_GUIDE.md) (Chinese): how to run it, try it on a phone, and open monitoring
 - [System design](docs/SYSTEM_DESIGN.md) (Chinese): the full product and technical design
+
+## License
+
+This repository is under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0). Personal study, research, experiments, and hobby projects are allowed. Schools, charities, and public research organizations may use it under the license as well.
+
+Commercial use is not covered. Using it in a product, a paid service, or a company's business needs separate permission from the author first. The full terms are in [LICENSE](LICENSE).
+
+Required Notice: Copyright 2026 seansha30 (https://github.com/SeanSha/LillaTolken)

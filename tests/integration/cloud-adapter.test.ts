@@ -132,14 +132,17 @@ describe('OpenAI ASR/TTS adapters (stub client)', () => {
     expect(params).not.toHaveProperty('languages');
   });
 
-  it('TTS returns mp3 bytes and treats an empty body as a TTS failure', async () => {
-    const ok = { audio: { speech: { create: vi.fn(async () => new Response(new Uint8Array([1, 2, 3]))) } } } as unknown as OpenAI;
-    const audio = await new OpenAISpeechSynthesizer(ok, cfg).synthesize('Hej', 'sv', meta);
+  it('the Speech API fallback returns mp3 and treats an empty body as a TTS failure', async () => {
+    const speech = { ...cfg, ttsModel: 'gpt-4o-mini-tts' };
+    const create = vi.fn(async () => new Response(new Uint8Array([1, 2, 3])));
+    const ok = { audio: { speech: { create } } } as unknown as OpenAI;
+    const audio = await new OpenAISpeechSynthesizer(ok, speech).synthesize('Hej', 'sv', meta);
     expect(audio.mimeType).toBe('audio/mpeg');
     expect(audio.bytes.length).toBe(3);
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ model: 'gpt-4o-mini-tts', response_format: 'mp3', voice: 'alloy' });
 
     const empty = { audio: { speech: { create: vi.fn(async () => new Response(new Uint8Array())) } } } as unknown as OpenAI;
-    await expect(new OpenAISpeechSynthesizer(empty, cfg).synthesize('Hej', 'sv', meta)).rejects.toMatchObject({ category: 'TTS' });
+    await expect(new OpenAISpeechSynthesizer(empty, speech).synthesize('Hej', 'sv', meta)).rejects.toMatchObject({ category: 'TTS' });
   });
 
   it('maps upstream failures to content-free categories', async () => {

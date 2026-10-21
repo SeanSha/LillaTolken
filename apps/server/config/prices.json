@@ -1,6 +1,6 @@
 {
   "_comment": "Server-side price registry (docs/SYSTEM_DESIGN.md 6.4). Edit this file to change rates; it is read by the Node backend only and is never writable through the API. Rates are USD. Null/absent rate = cannot price (cost shows Unknown, never $0.00). Bump `revision` whenever you change a rate.",
-  "revision": "2026-10-21",
+  "revision": "2026-10-21-2",
   "effectiveDate": "2026-10-21",
   "sourceUrl": "https://developers.openai.com/api/docs/pricing",
   "entries": [
@@ -58,6 +58,19 @@
       "billingMetric": "audio_minute",
       "unit": "USD per audio minute",
       "perMinuteUsd": 0.006
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-realtime-2.1-mini",
+      "stages": ["TTS"],
+      "billingMetric": "tokens",
+      "unit": "USD per 1M tokens. Text input 0.60, cached text input 0.06, text output 2.40, audio input 10, cached audio input 0.30, audio output 20. This TTS path sends text only.",
+      "inputPerMTok": 0.6,
+      "cachedInputPerMTok": 0.06,
+      "textOutputPerMTok": 2.4,
+      "audioInputPerMTok": 10,
+      "cachedAudioInputPerMTok": 0.3,
+      "audioOutputPerMTok": 20
     },
     {
       "provider": "openai",

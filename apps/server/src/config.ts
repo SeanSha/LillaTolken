@@ -73,7 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       asrModel: env.OPENAI_ASR_MODEL || 'gpt-transcribe',
       llmModel: env.OPENAI_LLM_MODEL || 'gpt-6-luna',
       visionModel: env.OPENAI_VISION_MODEL || 'gpt-4.1-mini',
-      ttsModel: env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
+      ttsModel: env.OPENAI_TTS_MODEL || 'gpt-realtime-2.1-mini',
       ttsVoice: env.OPENAI_TTS_VOICE || 'alloy',
       temperature: tempRaw === undefined ? 0 : tempRaw === '' ? undefined : num(tempRaw, 0),
       timeoutMs: num(env.OPENAI_TIMEOUT_MS, 30000),

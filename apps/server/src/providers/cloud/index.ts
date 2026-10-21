@@ -29,6 +29,7 @@ import {
   TRANSLATE_ZH_TO_SV_PROMPT,
   TTS_INSTRUCTIONS,
 } from './prompts';
+import { synthesizeRealtimeTts, usesRealtimeTts, type RealtimeTtsConnect } from './realtimeTts';
 
 type OpenAIConfig = ServerConfig['openai'];
 
@@ -209,9 +210,28 @@ export class OpenAISpeechSynthesizer implements SpeechSynthesizer {
   constructor(
     private readonly client: OpenAI,
     private readonly cfg: OpenAIConfig,
+    private readonly connectRealtime?: RealtimeTtsConnect,
   ) {}
 
   async synthesize(text: string, language: Language, meta: RequestMeta): Promise<AudioData> {
+    if (usesRealtimeTts(this.cfg.ttsModel)) {
+      try {
+        return await synthesizeRealtimeTts({
+          client: this.client,
+          model: this.cfg.ttsModel,
+          voice: this.cfg.ttsVoice,
+          language,
+          text,
+          timeoutMs: this.cfg.timeoutMs,
+          signal: meta.signal,
+          connect: this.connectRealtime,
+          onUsage: (usage) => meta.report?.(usage),
+        });
+      } catch (error) {
+        const mapped = mapOpenAIError(error);
+        throw mapped.category === 'SERVER' ? new AppError('TTS', mapped.message) : mapped;
+      }
+    }
     try {
       const supportsInstructions = this.cfg.ttsModel.startsWith('gpt-4o');
       const response = await this.client.audio.speech.create(

@@ -53,3 +53,9 @@ export const TTS_INSTRUCTIONS: Record<'zh' | 'sv', string> = {
   zh: 'Speak Mandarin Chinese slowly, clearly and in a warm, friendly tone suitable for young children.',
   sv: 'Speak Swedish clearly at a natural, calm pace in a friendly tone.',
 };
+
+/** Realtime TTS is a voice model. This keeps it from answering or paraphrasing the translation. */
+export const TTS_READ_EXACTLY = `You are a speech synthesizer, not a conversational assistant.
+Read the user message aloud exactly as written, in its original language.
+Do not translate, answer, greet, explain, paraphrase, or add any words.
+If the message is a question, read the question. Do not answer it.`;

@@ -17,6 +17,11 @@ const EntrySchema = z.object({
   inputPerMTok: num.nullish(),
   cachedInputPerMTok: num.nullish(),
   outputPerMTok: num.nullish(),
+  /** Set together when text and audio tokens have different rates (Realtime TTS). */
+  textOutputPerMTok: num.nullish(),
+  audioInputPerMTok: num.nullish(),
+  cachedAudioInputPerMTok: num.nullish(),
+  audioOutputPerMTok: num.nullish(),
   perMinuteUsd: num.nullish(),
   costIsVendorEstimate: z.boolean().optional(),
 });
@@ -137,6 +142,10 @@ export class PriceRegistry {
 
     const u = input.usage;
 
+    if (entry.billingMetric === 'tokens' && entry.audioOutputPerMTok != null) {
+      return this.mixedTokens(entry, u, unknown);
+    }
+
     if (entry.billingMetric === 'tokens') {
       const { inputPerMTok, outputPerMTok } = entry;
       if (u.promptTokens === undefined || u.outputTokens === undefined) {
@@ -180,6 +189,74 @@ export class PriceRegistry {
         rates: { perMinuteUsd: rate },
         quantities: { audioMinutes: minutes, promptTokens: u.promptTokens ?? null, outputTokens: u.outputTokens ?? null },
         note: entry.costIsVendorEstimate ? 'rate is the vendor-published estimated cost per minute' : undefined,
+      },
+    };
+  }
+
+  /** Text and audio tokens are billed at different rates. Missing a split stays Unknown. */
+  private mixedTokens(
+    entry: PriceEntry,
+    u: NormalizedUsage,
+    unknown: (note: string, detail?: Partial<CostDetail>) => CostResult,
+  ): CostResult {
+    const textIn = u.inputTextTokens;
+    const audioIn = u.inputAudioTokens;
+    const imageIn = u.inputImageTokens ?? 0;
+    const textOut = u.outputTextTokens;
+    const audioOut = u.outputAudioTokens;
+    if (textIn === undefined || audioIn === undefined || textOut === undefined || audioOut === undefined) {
+      return unknown('provider did not split text and audio tokens; not guessing a blended rate', { unit: entry.unit });
+    }
+    if (imageIn > 0) return unknown('image tokens are not priced on this TTS call', { unit: entry.unit });
+    if (u.promptTokens !== undefined && u.promptTokens !== textIn + audioIn + imageIn) {
+      return unknown('input token total does not match the reported text and audio split', { unit: entry.unit });
+    }
+    if (u.outputTokens !== undefined && u.outputTokens !== textOut + audioOut) {
+      return unknown('output token total does not match the reported text and audio split', { unit: entry.unit });
+    }
+    const textInRate = entry.inputPerMTok;
+    const textOutRate = entry.textOutputPerMTok ?? entry.outputPerMTok;
+    const audioOutRate = entry.audioOutputPerMTok;
+    const audioInRate = entry.audioInputPerMTok;
+    if (textInRate == null || textOutRate == null || audioOutRate == null) return unknown('rate missing in price registry', { unit: entry.unit });
+    if (audioIn > 0 && audioInRate == null) return unknown('audio input rate missing in price registry', { unit: entry.unit });
+    const cachedText = Math.min(u.cachedTextTokens ?? 0, textIn);
+    const cachedAudio = Math.min(u.cachedAudioTokens ?? 0, audioIn);
+    const cachedTextRate = entry.cachedInputPerMTok ?? textInRate;
+    const cachedAudioRate = entry.cachedAudioInputPerMTok ?? audioInRate ?? 0;
+    const usd =
+      ((textIn - cachedText) * textInRate +
+        cachedText * cachedTextRate +
+        (audioIn - cachedAudio) * (audioInRate ?? 0) +
+        cachedAudio * cachedAudioRate +
+        textOut * textOutRate +
+        audioOut * audioOutRate) /
+      1_000_000;
+    return {
+      costUsd: usd,
+      costBasis: 'reported_usage',
+      priceRevision: this.data.revision,
+      detail: {
+        method: 'text and audio tokens x their own rates / 1e6',
+        unit: entry.unit,
+        rates: {
+          inputPerMTok: textInRate,
+          cachedInputPerMTok: entry.cachedInputPerMTok ?? null,
+          textOutputPerMTok: textOutRate,
+          audioInputPerMTok: audioInRate ?? null,
+          cachedAudioInputPerMTok: entry.cachedAudioInputPerMTok ?? null,
+          audioOutputPerMTok: audioOutRate,
+        },
+        quantities: {
+          inputTextTokens: textIn,
+          cachedTextTokens: cachedText,
+          inputAudioTokens: audioIn,
+          cachedAudioTokens: cachedAudio,
+          outputTextTokens: textOut,
+          outputAudioTokens: audioOut,
+          promptTokens: u.promptTokens ?? null,
+          outputTokens: u.outputTokens ?? null,
+        },
       },
     };
   }

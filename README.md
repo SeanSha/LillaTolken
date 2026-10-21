@@ -133,3 +133,11 @@ flowchart LR
 
 - [开发说明](docs/DEVELOPER_GUIDE.md)：怎么跑起来、怎么在手机上试、怎么看监控
 - [系统设计](docs/SYSTEM_DESIGN.md)：完整的产品与技术设计
+
+## 许可
+
+本仓库使用 [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)。个人学习、研究、试验和业余项目可以用。学校、公益机构和公共研究机构也可以按许可证使用。
+
+商业用途不在这份许可里。拿它做成产品、提供收费服务，或放进公司业务里使用，需要先另外取得作者同意。完整条款见 [LICENSE](LICENSE)。
+
+Required Notice: Copyright 2026 seansha30 (https://github.com/SeanSha/LillaTolken)
