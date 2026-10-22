@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { sniffImage } from '@kt/shared';
 import { fileInputProps } from '../../apps/web/src/vocabulary/capture';
-import { assertSourceFile, fittedSize, VocabImageError } from '../../apps/web/src/vocabulary/image';
+import { JPEG_QUALITIES, MAX_EDGE, assertSourceFile, fittedSize, VocabImageError } from '../../apps/web/src/vocabulary/image';
 import { assertVocabularyImage } from '../../apps/server/src/vocabulary/image';
 
 function jpeg(): Uint8Array {
@@ -18,6 +18,13 @@ describe('photo capture and image checks', () => {
     expect(upload.capture).toBeUndefined();
     expect(upload.accept).toContain('image/jpeg');
     expect(upload.accept).toContain('image/heic');
+  });
+
+  it('keeps the 1280px edge and the 0.82 quality ladder', () => {
+    expect(MAX_EDGE).toBe(1280);
+    expect(JPEG_QUALITIES[0]).toBe(0.82);
+    expect(fittedSize(4000, 3000)).toEqual({ width: 1280, height: 960 });
+    expect(fittedSize(1000, 800)).toEqual({ width: 1000, height: 800 });
   });
 
   it('downscales the long edge and rejects files the browser should not decode', () => {

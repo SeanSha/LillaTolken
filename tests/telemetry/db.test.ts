@@ -27,7 +27,7 @@ describe('schema migrations', () => {
   it('a fresh database is migrated to the current version with every table', () => {
     const db = new TelemetryDb(':memory:');
     expect(db.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(tableNames(db)).toEqual(['ai_requests', 'annotations', 'events', 'http_rtt', 'model_configs', 'segments', 'sessions', 'settings', 'tasks', 'test_runs']);
+    expect(tableNames(db)).toEqual(['ai_requests', 'annotations', 'events', 'http_rtt', 'model_configs', 'segments', 'sessions', 'settings', 'tasks', 'test_runs', 'vocab_actions']);
   });
 
   it('has no column able to hold audio, transcripts, prompts or translations', () => {

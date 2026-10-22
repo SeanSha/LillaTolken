@@ -125,4 +125,57 @@ describe('household vocabulary store', () => {
     expect(fs.existsSync(path.join(paths.media, owner, input.cardId))).toBe(false);
     store.close();
   });
+
+  it('replaces the photo without touching words or audio, and keeps the old photo if the new one is rejected', () => {
+    const paths = place();
+    const store = new VocabularyLibraryStore(paths.db, paths.media);
+    const owner = store.pair('family-code').ownerId;
+    const input = draft(9);
+    const saved = store.save(owner, { ...input, zhAudio: Uint8Array.from([1, 2, 3]), svAudio: Uint8Array.from([4, 5]) });
+    store.attachAudio(owner, saved.card.id, 'zh', Uint8Array.from([1, 2, 3]));
+    const before = store.mediaFile(owner, saved.card.id, 'image');
+    const oldBytes = before ? fs.readFileSync(before.file) : Buffer.alloc(0);
+    const audio = store.mediaFile(owner, saved.card.id, 'sv');
+
+    const next = jpeg(12);
+    const imageHash = crypto.createHash('sha256').update(next).digest('hex');
+    const replaced = store.replaceImage(owner, saved.card.id, { imageHash, image: new Uint8Array(next), thumb: new Uint8Array(jpeg(2)) });
+    expect(replaced.id).toBe(saved.card.id);
+    expect(replaced.zh).toBe('苹果');
+    expect(replaced.sv).toBe('äpple');
+    expect(replaced.article).toBe('ett');
+    expect(replaced.category).toBe('food');
+    expect(replaced.hasZhAudio).toBe(true);
+    expect(replaced.hasSvAudio).toBe(true);
+    expect(replaced.imageHash).toBe(imageHash);
+    expect(store.mediaFile(owner, saved.card.id, 'sv')?.file).toBe(audio?.file);
+    expect(fs.readFileSync(store.mediaFile(owner, saved.card.id, 'image')!.file).equals(next)).toBe(true);
+    expect(fs.existsSync(before!.file)).toBe(false);
+
+    const broken = jpeg(15);
+    expect(() =>
+      store.replaceImage(owner, saved.card.id, {
+        imageHash: crypto.createHash('sha256').update(broken).digest('hex'),
+        image: new Uint8Array(broken),
+        thumb: Uint8Array.from([1, 2, 3]),
+      }),
+    ).toThrow(/image/);
+    expect(store.get(owner, saved.card.id)?.imageHash).toBe(imageHash);
+    expect(fs.readFileSync(store.mediaFile(owner, saved.card.id, 'image')!.file).equals(next)).toBe(true);
+    expect(store.get(owner, saved.card.id)?.hasSvAudio).toBe(true);
+
+    const other = store.save(owner, draft(4, crypto.randomUUID()));
+    expect(() => store.replaceImage(owner, saved.card.id, { imageHash: other.card.imageHash, image: draft(4).image, thumb: new Uint8Array(jpeg(1)) })).toThrow(/already saved/);
+    expect(store.get(owner, saved.card.id)?.imageHash).toBe(imageHash);
+
+    const renamed = store.update(owner, saved.card.id, { zh: '苹果汁' });
+    expect(renamed.hasZhAudio).toBe(false);
+    expect(renamed.hasSvAudio).toBe(true);
+    expect(store.mediaFile(owner, saved.card.id, 'zh')).toBeNull();
+    const category = store.update(owner, saved.card.id, { category: 'toys' });
+    expect(category.hasSvAudio).toBe(true);
+    expect(category.zh).toBe('苹果汁');
+    expect(oldBytes.equals(Buffer.from(input.image))).toBe(true);
+    store.close();
+  });
 });

@@ -135,6 +135,29 @@ export async function uploadCard(card: UploadCard, fetchImpl: FetchLike = fetch)
   return body;
 }
 
+export async function replaceRemoteImage(
+  id: string,
+  media: { imageHash: string; image: Blob; thumb: Blob },
+  fetchImpl: FetchLike = fetch,
+): Promise<RemoteCard> {
+  const response = await request(
+    `/api/vocabulary/cards/${encodeURIComponent(id)}/image`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageHash: media.imageHash,
+        imageBase64: await b64(media.image),
+        thumbBase64: await b64(media.thumb),
+      }),
+    },
+    fetchImpl,
+  );
+  if (!response.ok) throw await fail(response);
+  const body = (await response.json()) as { card: RemoteCard };
+  return body.card;
+}
+
 export async function patchRemoteCard(
   id: string,
   patch: { zh?: string; sv?: string; article?: SwedishArticle | null; category?: VocabularyCategoryId },

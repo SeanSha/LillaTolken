@@ -15,6 +15,17 @@ export type IdentifyStep =
 
 const EMPTY: Draft = { zh: '', sv: '', article: null, translationUncertain: true, category: 'other' };
 
+/** One recognition at a time. A second tap before the first returns is refused. */
+export function claimRecognition(lock: { current: boolean }): 'start' | 'blocked' {
+  if (lock.current) return 'blocked';
+  lock.current = true;
+  return 'start';
+}
+
+export function releaseRecognition(lock: { current: boolean }): void {
+  lock.current = false;
+}
+
 /** What the screen does with an identify result. Uncertain never arrives with a guessed word. */
 export function stepAfterIdentify(result: VocabularyIdentifyResponse): IdentifyStep {
   if (result.outcome === 'person' || result.outcome === 'none') return { kind: 'blocked', outcome: result.outcome };

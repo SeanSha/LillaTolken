@@ -2,8 +2,9 @@
 import fs from 'node:fs';
 import express, { type NextFunction, type Request, type Response, Router } from 'express';
 import { z } from 'zod';
-import { AppError, VOCABULARY_CATEGORIES, toAppError, type VocabularyCategoryId } from '@kt/shared';
+import { AppError, VOCABULARY_CATEGORIES, VOCAB_ACTIONS, toAppError, type ProviderPreset, type VocabActionKind, type VocabularyCategoryId } from '@kt/shared';
 import { clientAddress, readCookie, sameOrigin } from '../monitor/auth';
+import { vocabularyCardId } from './telemetry';
 import type { CardQuery, StoredCard, VocabularyLibraryStore, VocabularyMediaKind } from './store';
 
 export const VOCAB_COOKIE = 'kt_vocab';
@@ -57,6 +58,22 @@ const PatchSchema = z
   })
   .refine((value) => value.zh !== undefined || value.sv !== undefined || value.article !== undefined || value.category !== undefined, 'empty patch');
 
+const MediaSchema = z.object({
+  imageHash: z.string(),
+  imageBase64: z.string().min(1).max(2_200_000),
+  thumbBase64: z.string().min(1).max(800_000),
+});
+
+const ActionSchema = z.object({
+  kind: z.enum(VOCAB_ACTIONS),
+  preset: z.enum(['mock', 'cloud', 'local']).default('cloud'),
+  cardId: z.string().max(80).nullable().optional(),
+});
+
+export type VocabularyRouterOptions = {
+  recordAction?: (kind: VocabActionKind, cardId: string | null, preset: ProviderPreset) => void;
+};
+
 function decode(value: string | null | undefined, max: number): Uint8Array | null {
   if (!value) return null;
   const bytes = new Uint8Array(Buffer.from(value, 'base64'));
@@ -67,14 +84,14 @@ function decode(value: string | null | undefined, max: number): Uint8Array | nul
 function publicCard(card: StoredCard) {
   return {
     ...card,
-    thumbUrl: `/api/vocabulary/media/${card.id}/thumb`,
-    imageUrl: `/api/vocabulary/media/${card.id}/image`,
+    thumbUrl: `/api/vocabulary/media/${card.id}/thumb?v=${card.updatedAt}`,
+    imageUrl: `/api/vocabulary/media/${card.id}/image?v=${card.updatedAt}`,
     zhAudioUrl: card.hasZhAudio ? `/api/vocabulary/media/${card.id}/zh` : null,
     svAudioUrl: card.hasSvAudio ? `/api/vocabulary/media/${card.id}/sv` : null,
   };
 }
 
-export function createVocabularyRouter(store: VocabularyLibraryStore): Router {
+export function createVocabularyRouter(store: VocabularyLibraryStore, options: VocabularyRouterOptions = {}): Router {
   const router = Router();
   const small = express.json({ limit: '16kb' });
   const body = express.json({ limit: '8mb' });
@@ -173,6 +190,31 @@ export function createVocabularyRouter(store: VocabularyLibraryStore): Router {
       return;
     }
     res.json({ card: publicCard(card) });
+  });
+
+  router.post('/cards/:cardId/image', body, (req, res) => {
+    const parsed = MediaSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError('BAD_REQUEST', 'invalid image');
+    const image = decode(parsed.data.imageBase64, 1_500_000);
+    const thumb = decode(parsed.data.thumbBase64, 400_000);
+    if (!image || !thumb) throw new AppError('BAD_REQUEST', 'image required');
+    const card = store.replaceImage(ownerOf(req), String(req.params.cardId), {
+      imageHash: parsed.data.imageHash,
+      image,
+      thumb,
+    });
+    res.json({ card: publicCard(card) });
+  });
+
+  router.post('/actions', small, (req, res) => {
+    const parsed = ActionSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError('BAD_REQUEST', 'invalid vocabulary action');
+    try {
+      options.recordAction?.(parsed.data.kind, vocabularyCardId(parsed.data.cardId ?? undefined), parsed.data.preset);
+    } catch {
+      // Monitoring must not block the child.
+    }
+    res.status(204).end();
   });
 
   router.patch('/cards/:cardId', small, (req, res) => {

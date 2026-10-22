@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import { AppError, sniffImage, VOCABULARY_CATEGORIES, VOCABULARY_LIMITS, type SwedishArticle, type VocabularyCategoryId } from '@kt/shared';
+import { AppError, sniffImage, swedishWithArticle, VOCABULARY_CATEGORIES, VOCABULARY_LIMITS, type SwedishArticle, type VocabularyCategoryId } from '@kt/shared';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HASH_RE = /^[a-f0-9]{64}$/;
@@ -47,6 +47,12 @@ export type CardPatch = {
   sv?: string;
   article?: SwedishArticle | null;
   category?: VocabularyCategoryId;
+};
+
+export type ImageReplacement = {
+  imageHash: string;
+  image: Uint8Array;
+  thumb: Uint8Array;
 };
 
 export type CardQuery = {
@@ -299,9 +305,60 @@ export class VocabularyLibraryStore {
     const article = patch.article === undefined ? row.article : patch.article;
     if (article !== null && article !== 'en' && article !== 'ett') throw new AppError('BAD_REQUEST', 'invalid article');
     const category = patch.category === undefined ? assertCategory(row.category) : assertCategory(patch.category);
-    this.raw.prepare('UPDATE cards SET zh = ?, sv = ?, article = ?, category = ?, updated_at = ? WHERE owner_id = ? AND card_id = ?').run(zh, sv, article, category, now, ownerId, id);
+    const previousArticle = row.article === 'en' || row.article === 'ett' ? row.article : null;
+    const nextArticle = article === 'en' || article === 'ett' ? article : null;
+    const clearZh = row.zh.trim() !== zh.trim();
+    const clearSv = swedishWithArticle(previousArticle, row.sv) !== swedishWithArticle(nextArticle, sv);
+    const zhRel = clearZh ? null : row.zh_audio_rel;
+    const svRel = clearSv ? null : row.sv_audio_rel;
+    this.raw
+      .prepare('UPDATE cards SET zh = ?, sv = ?, article = ?, category = ?, zh_audio_rel = ?, sv_audio_rel = ?, updated_at = ? WHERE owner_id = ? AND card_id = ?')
+      .run(zh, sv, article, category, zhRel, svRel, now, ownerId, id);
+    if (clearZh) this.removeFile(row.zh_audio_rel);
+    if (clearSv) this.removeFile(row.sv_audio_rel);
     const next = this.row(ownerId, id);
     if (!next) throw new AppError('SERVER', 'card missing after update');
+    return this.toCard(next);
+  }
+
+  /**
+   * Swaps the photo files and the image hash. Labels, category, and audio paths stay.
+   * New files are written beside the old ones. The old files are removed only after the row updates.
+   */
+  replaceImage(ownerId: string, cardId: string, media: ImageReplacement, now = Date.now()): StoredCard {
+    const id = assertUuid(cardId);
+    const row = this.row(ownerId, id);
+    if (!row) throw new AppError('BAD_REQUEST', 'missing card');
+    const imageHash = HASH_RE.test(media.imageHash) ? media.imageHash : '';
+    if (!imageHash) throw new AppError('BAD_REQUEST', 'invalid image hash');
+    const actualHash = crypto.createHash('sha256').update(media.image).digest('hex');
+    if (actualHash !== imageHash) throw new AppError('BAD_REQUEST', 'image hash mismatch');
+    if (row.image_hash === imageHash) return this.toCard(row);
+    const clash = this.raw.prepare('SELECT card_id FROM cards WHERE owner_id = ? AND image_hash = ? AND card_id != ?').get(ownerId, imageHash, id) as
+      | { card_id: string }
+      | undefined;
+    if (clash) throw new AppError('BAD_REQUEST', 'image already saved');
+    const imageExt = assertImage(media.image, VOCABULARY_LIMITS.maxImageBytes);
+    const thumbExt = assertImage(media.thumb, MAX_THUMB_BYTES);
+    const imageRel = `${ownerId}/${id}/image-${imageHash}.${imageExt}`;
+    const thumbRel = `${ownerId}/${id}/thumb-${imageHash}.${thumbExt}`;
+    const written: string[] = [];
+    try {
+      this.writeRel(imageRel, media.image);
+      written.push(imageRel);
+      this.writeRel(thumbRel, media.thumb);
+      written.push(thumbRel);
+      this.raw
+        .prepare('UPDATE cards SET image_hash = ?, image_rel = ?, thumb_rel = ?, updated_at = ? WHERE owner_id = ? AND card_id = ?')
+        .run(imageHash, imageRel, thumbRel, now, ownerId, id);
+    } catch (error) {
+      for (const rel of written) this.removeFile(rel);
+      throw error;
+    }
+    if (row.image_rel !== imageRel) this.removeFile(row.image_rel);
+    if (row.thumb_rel !== thumbRel) this.removeFile(row.thumb_rel);
+    const next = this.row(ownerId, id);
+    if (!next) throw new AppError('SERVER', 'card missing after image replace');
     return this.toCard(next);
   }
 
@@ -382,6 +439,13 @@ export class VocabularyLibraryStore {
     const partial = `${file}.partial`;
     fs.writeFileSync(partial, bytes, { mode: 0o600 });
     fs.renameSync(partial, file);
+  }
+
+  private removeFile(rel: string | null): void {
+    if (!rel) return;
+    const file = this.safeFile(rel);
+    if (!file) return;
+    fs.rmSync(file, { force: true });
   }
 
   private removeDir(ownerId: string, cardId: string): void {

@@ -4,12 +4,15 @@ import { player } from '../services/runtime';
 import { Icon, Mascot } from '../ui/art';
 import { BigButton } from '../ui/BigButton';
 import { identifyImage } from './api';
+import { reportVocabAction } from './actions';
 import { fileInputProps } from './capture';
 import { identificationNotice, imageErrorCopy, vocabularyErrorCopy } from './copy';
 import { VocabImageError, compressImageFile, thumbnailBlob, type PreparedImage } from './image';
+import { findVocabularyMatch } from './identity';
 import { DuplicateCardError, cacheCardAudio, createIndexedDbVocabularyLibrary, saveNewCard, type VocabularyCard } from './library';
+import { PhotoReplaceError, replaceCardPhoto } from './photo';
 import { canSaveDraft, labelForSpeech, synthesizeLabel } from './speech';
-import { stepAfterIdentify, type Draft } from './flow';
+import { claimRecognition, releaseRecognition, stepAfterIdentify, type Draft } from './flow';
 import { importLocalCard } from './sync';
 import { VocabBrowser } from './VocabBrowser';
 
@@ -19,6 +22,7 @@ type Stage =
   | { name: 'identifying'; image: PreparedImage; cardId: string }
   | { name: 'choose'; image: PreparedImage; candidates: VocabularyCandidate[]; cardId: string }
   | { name: 'draft'; image: PreparedImage; draft: Draft; banner: 'uncertain' | 'check' | null; cardId: string }
+  | { name: 'replace'; image: PreparedImage; existing: VocabularyCard; draft: Draft; cardId: string }
   | { name: 'blocked'; image: PreparedImage; outcome: 'person' | 'none'; cardId: string }
   | { name: 'card'; card: VocabularyCard; note?: string }
   | { name: 'library' }
@@ -36,7 +40,10 @@ export function VocabularyShell({ entry, openingFile = null, preset }: { entry: 
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<PreparedImage | null>(null);
+  const identifyLock = useRef(false);
+  const choosing = useRef(false);
   const [stage, setStage] = useState<Stage>(entry === 'library' ? { name: 'library' } : { name: 'capture' });
+  const [replaceError, setReplaceError] = useState<string | null>(null);
   const [clips, setClips] = useState<{ zh: Blob | null; sv: Blob | null }>({ zh: null, sv: null });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -64,6 +71,7 @@ export function VocabularyShell({ entry, openingFile = null, preset }: { entry: 
       rememberImage(image);
       setClips({ zh: null, sv: null });
       setSaveError(false);
+      setReplaceError(null);
       setPlayError(null);
       setStage({ name: 'preview', image, cardId: crypto.randomUUID() });
     } catch (error) {
@@ -83,16 +91,63 @@ export function VocabularyShell({ entry, openingFile = null, preset }: { entry: 
 
   const onIdentify = async () => {
     if (stage.name !== 'preview') return;
+    if (claimRecognition(identifyLock) === 'blocked') {
+      reportVocabAction('prevented_duplicate_request', preset, stage.cardId);
+      return;
+    }
     const image = stage.image;
     const cardId = stage.cardId;
     setStage({ name: 'identifying', image, cardId });
     try {
+      const samePhoto = await library.findByHash(image.hash);
+      if (samePhoto) {
+        reportVocabAction('exact_image_reuse', preset, samePhoto.id);
+        setFocusId(samePhoto.id);
+        setStage({ name: 'library' });
+        return;
+      }
       const result = await identifyImage(image.bytes, 'image/jpeg', { cardId, preset });
       setClips({ zh: null, sv: null });
       setStage(stageAfterIdentify(image, result, cardId));
     } catch (error) {
       const copy = vocabularyErrorCopy(error);
       setStage({ name: 'error', image, zh: copy.zh, sv: copy.sv, cardId });
+    } finally {
+      releaseRecognition(identifyLock);
+    }
+  };
+
+  const showDuplicate = (image: PreparedImage, draft: Draft, cardId: string, existing: VocabularyCard) => {
+    reportVocabAction('duplicate_detected', preset, existing.id);
+    setReplaceError(null);
+    setStage({ name: 'replace', image, existing, draft, cardId });
+  };
+
+  const commitCandidate = async (candidate: VocabularyCandidate) => {
+    if (stage.name !== 'choose' || choosing.current) return;
+    choosing.current = true;
+    const draft: Draft = {
+      zh: candidate.zh,
+      sv: candidate.sv,
+      article: candidate.article,
+      translationUncertain: candidate.translationUncertain,
+      category: candidate.category,
+    };
+    try {
+      const existing = await findVocabularyMatch(library, draft);
+      if (existing) {
+        showDuplicate(stage.image, draft, stage.cardId, existing);
+        return;
+      }
+      setStage({
+        name: 'draft',
+        image: stage.image,
+        cardId: stage.cardId,
+        draft,
+        banner: candidate.translationUncertain ? 'check' : null,
+      });
+    } finally {
+      choosing.current = false;
     }
   };
 
@@ -101,6 +156,11 @@ export function VocabularyShell({ entry, openingFile = null, preset }: { entry: 
     setSaving(true);
     setSaveError(false);
     try {
+      const existingWord = await findVocabularyMatch(library, stage.draft);
+      if (existingWord) {
+        showDuplicate(stage.image, stage.draft, stage.cardId, existingWord);
+        return;
+      }
       let thumb: Blob | null = null;
       try {
         thumb = await thumbnailBlob(stage.image.blob);
@@ -120,6 +180,7 @@ export function VocabularyShell({ entry, openingFile = null, preset }: { entry: 
         svAudio: clips.sv,
       });
       await importLocalCard(library, card);
+      reportVocabAction('card_created', preset, card.id);
       setFocusId(card.id);
       setStage({ name: 'library' });
     } catch (error) {
@@ -132,6 +193,62 @@ export function VocabularyShell({ entry, openingFile = null, preset }: { entry: 
         }
       }
       setSaveError(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const leaveReplace = (choice: 'keep' | 'cancel') => {
+    if (stage.name !== 'replace') return;
+    if (choice === 'keep') reportVocabAction('keep_existing_photo', preset, stage.existing.id);
+    const id = stage.existing.id;
+    rememberImage(null);
+    setReplaceError(null);
+    setFocusId(id);
+    setStage({ name: 'library' });
+  };
+
+  const confirmNewPhoto = async () => {
+    if (stage.name !== 'replace' || saving) return;
+    setSaving(true);
+    setReplaceError(null);
+    const { image, draft, cardId, existing } = stage;
+    try {
+      const match = await findVocabularyMatch(library, draft);
+      if (!match) {
+        let thumb: Blob | null = null;
+        try {
+          thumb = await thumbnailBlob(image.blob);
+        } catch {
+          thumb = null;
+        }
+        const card = await saveNewCard(library, {
+          id: cardId,
+          image: image.blob,
+          thumb,
+          imageHash: image.hash,
+          zh: draft.zh,
+          sv: draft.sv,
+          article: draft.article,
+          category: draft.category,
+          zhAudio: clips.zh,
+          svAudio: clips.sv,
+        });
+        await importLocalCard(library, card);
+        reportVocabAction('card_created', preset, card.id);
+        rememberImage(null);
+        setFocusId(card.id);
+        setStage({ name: 'library' });
+        return;
+      }
+      const card = await replaceCardPhoto(library, match.id, { image: image.blob, imageHash: image.hash });
+      reportVocabAction('replace_after_duplicate', preset, card.id);
+      rememberImage(null);
+      setFocusId(card.id);
+      setStage({ name: 'library' });
+    } catch (error) {
+      setReplaceError(error instanceof PhotoReplaceError && error.message === 'IMAGE_IN_USE' ? '这张照片已经有了。' : '没换上。再试一次。');
+      setFocusId(existing.id);
     } finally {
       setSaving(false);
     }
@@ -288,21 +405,7 @@ export function VocabularyShell({ entry, openingFile = null, preset }: { entry: 
                 tone="blue"
                 label={`${candidate.zh} ${swedishWithArticle(candidate.article, candidate.sv)}`}
                 testId="vocab-choice"
-                onClick={() =>
-                  setStage({
-                    name: 'draft',
-                    image: stage.image,
-                    cardId: stage.cardId,
-                    draft: {
-                      zh: candidate.zh,
-                      sv: candidate.sv,
-                      article: candidate.article,
-                      translationUncertain: candidate.translationUncertain,
-                      category: candidate.category,
-                    },
-                    banner: candidate.translationUncertain ? 'check' : null,
-                  })
-                }
+                onClick={() => void commitCandidate(candidate)}
               >
                 <span>
                   {candidate.zh} · {swedishWithArticle(candidate.article, candidate.sv)}
@@ -337,6 +440,40 @@ export function VocabularyShell({ entry, openingFile = null, preset }: { entry: 
           onSave={() => void onSave()}
           onRetake={() => cameraRef.current?.click()}
         />
+      )}
+
+      {stage.name === 'replace' && (
+        <div className="vocab-replace" data-testid="vocab-replace">
+          <button type="button" className="vocab-learn-close" data-testid="vocab-replace-cancel" aria-label="Cancel" onClick={() => leaveReplace('cancel')}>
+            ←
+          </button>
+          <p className="vocab-replace-title">你已经有这个词啦！</p>
+          <p className="vocab-learn-zh">{stage.existing.zh}</p>
+          <p className="vocab-learn-sv">{swedishWithArticle(stage.existing.article, stage.existing.sv)}</p>
+          <div className="vocab-replace-photos">
+            <figure>
+              <BlobImage blob={stage.existing.image} className="vocab-replace-photo" />
+              <figcaption>旧照片</figcaption>
+            </figure>
+            <figure>
+              <img src={stage.image.previewUrl} alt="" data-testid="vocab-new-photo" />
+              <figcaption>新照片</figcaption>
+            </figure>
+          </div>
+          {replaceError && (
+            <p className="warn" role="alert">
+              {replaceError}
+            </p>
+          )}
+          <div className="stack-actions">
+            <BigButton testId="vocab-keep-old" tone="gray" label="Keep the old photo" disabled={saving} onClick={() => leaveReplace('keep')}>
+              <span>保留旧照片</span>
+            </BigButton>
+            <BigButton testId="vocab-use-new" tone="green" label="Use the new photo" disabled={saving} onClick={() => void confirmNewPhoto()}>
+              <span>使用新照片</span>
+            </BigButton>
+          </div>
+        </div>
       )}
 
       {stage.name === 'card' && (
@@ -417,7 +554,7 @@ export function VocabularyShell({ entry, openingFile = null, preset }: { entry: 
 }
 
 function stageImage(stage: Stage): PreparedImage | null {
-  if (stage.name === 'preview' || stage.name === 'identifying' || stage.name === 'choose' || stage.name === 'draft' || stage.name === 'blocked') return stage.image;
+  if (stage.name === 'preview' || stage.name === 'identifying' || stage.name === 'choose' || stage.name === 'draft' || stage.name === 'replace' || stage.name === 'blocked') return stage.image;
   if (stage.name === 'error') return stage.image;
   return null;
 }

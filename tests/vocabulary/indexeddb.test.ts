@@ -76,4 +76,27 @@ describe('IndexedDB vocabulary cards', () => {
     expect(summaries.map((row) => row.zh)).toEqual(['杯子']);
     await library.close();
   });
+
+  it('replaces the photo in place and reloads the cached audio', async () => {
+    const first = createIndexedDbVocabularyLibrary();
+    const image = new Blob([Uint8Array.from([1, 2, 3, 4])], { type: 'image/jpeg' });
+    const card = await saveNewCard(first, { image, thumb: image, imageHash: 'photo-1', zh: '汽车', sv: 'bil', article: 'en' });
+    const audio = new Blob([Uint8Array.from([5])], { type: 'audio/mpeg' });
+    await cacheCardAudio(first, card.id, 'zh', audio);
+    await cacheCardAudio(first, card.id, 'sv', audio);
+    const nextImage = new Blob([Uint8Array.from([8, 8])], { type: 'image/jpeg' });
+    await first.replaceImage(card.id, { image: nextImage, thumb: nextImage, imageHash: 'photo-2' });
+    await first.close();
+
+    const second = createIndexedDbVocabularyLibrary();
+    const loaded = await second.get(card.id);
+    expect(loaded?.imageHash).toBe('photo-2');
+    expect(loaded?.zh).toBe('汽车');
+    expect(loaded?.article).toBe('en');
+    expect(new Uint8Array(await loaded!.image.arrayBuffer())).toEqual(Uint8Array.from([8, 8]));
+    expect(new Uint8Array(await loaded!.zhAudio!.arrayBuffer())).toEqual(Uint8Array.from([5]));
+    expect(new Uint8Array(await loaded!.svAudio!.arrayBuffer())).toEqual(Uint8Array.from([5]));
+    expect(await second.findByHash('photo-1')).toBeNull();
+    await second.close();
+  });
 });

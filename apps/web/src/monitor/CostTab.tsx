@@ -168,6 +168,46 @@ function VocabularyCost({ report, error }: { report: VocabularyUsageReport | nul
           </tbody>
         </table>
       </div>
+      <h3>Photo actions</h3>
+      <p className="mon-note">{report?.actionNote ?? 'Loading photo actions…'}</p>
+      <table className="mon-table" data-testid="vocab-actions">
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>New cards</td>
+            <td>{report?.actions.card_created ?? 0}</td>
+          </tr>
+          <tr>
+            <td>Duplicate words after recognition</td>
+            <td>{report?.actions.duplicate_detected ?? 0}</td>
+          </tr>
+          <tr>
+            <td>Kept the old photo</td>
+            <td>{report?.actions.keep_existing_photo ?? 0}</td>
+          </tr>
+          <tr>
+            <td>Replaced photo after a duplicate word</td>
+            <td>{report?.actions.replace_after_duplicate ?? 0}</td>
+          </tr>
+          <tr>
+            <td>Replaced photo from the card</td>
+            <td>{report?.actions.direct_replace ?? 0}</td>
+          </tr>
+          <tr>
+            <td>Reused an identical photo</td>
+            <td>{report?.actions.exact_image_reuse ?? 0}</td>
+          </tr>
+          <tr>
+            <td>Blocked a repeated recognition tap</td>
+            <td>{report?.actions.prevented_duplicate_request ?? 0}</td>
+          </tr>
+        </tbody>
+      </table>
       {(report?.cards.length ?? 0) > 0 && (
         <>
           <h3>Per card</h3>

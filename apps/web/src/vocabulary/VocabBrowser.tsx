@@ -425,9 +425,15 @@ function LearnView({
           删掉
         </button>
       </div>
-      <div className="vocab-learn-photo-wrap">{imageUrl && <img className="vocab-learn-photo" src={imageUrl} alt="" />}</div>
-      <p className="vocab-learn-zh">{item.zh}</p>
-      <p className="vocab-learn-sv">{swedishWithArticle(item.article, item.sv)}</p>
+      <div className="vocab-learn-body">
+        <div className="vocab-learn-photo-wrap">
+          {imageUrl && <img className="vocab-learn-photo" src={imageUrl} alt="" />}
+        </div>
+        <div className="vocab-learn-words">
+          <p className="vocab-learn-zh">{item.zh}</p>
+          <p className="vocab-learn-sv">{swedishWithArticle(item.article, item.sv)}</p>
+        </div>
+      </div>
       <div className="vocab-learn-dock">
         <div className="split-actions vocab-play">
           <BigButton testId="vocab-play-zh" tone="red" label="Play Chinese" disabled={busyPlay !== null} onClick={() => { player.unlock(); void play('zh'); }}>

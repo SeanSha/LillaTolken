@@ -329,6 +329,15 @@ export function createApp({ config, registry, events, db: injectedDb, prices: in
   app.use('/api/vocabulary', (req, res, next) => {
     vocabularyRouter ??= createVocabularyRouter(
       vocabularyStore ?? new VocabularyLibraryStore(config.vocabulary.dbPath, config.vocabulary.mediaDir),
+      {
+        recordAction: (kind, cardId, preset) => {
+          try {
+            db.recordVocabAction({ kind, cardId, preset });
+          } catch {
+            // A monitoring failure must not change the child's result.
+          }
+        },
+      },
     );
     return vocabularyRouter(req, res, next);
   });

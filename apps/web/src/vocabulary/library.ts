@@ -1,4 +1,5 @@
 import { vocabularyCategory, type SwedishArticle, type VocabularyCategoryId } from '@kt/shared';
+import { spokenLabel } from './identity';
 
 export type VocabularyCard = {
   id: string;
@@ -78,7 +79,9 @@ export type VocabularyLibrary = {
   get(id: string): Promise<VocabularyCard | null>;
   findByHash(imageHash: string): Promise<VocabularyCard | null>;
   add(card: VocabularyCard): Promise<void>;
-  update(id: string, patch: { zh?: string; sv?: string; article?: SwedishArticle | null; category?: VocabularyCategoryId; categorySource?: 'auto' | 'manual' | 'unset' }): Promise<VocabularyCard>;
+  update(id: string, patch: CardTextPatch): Promise<VocabularyCard>;
+  /** Swaps the photo only. Words, category, audio, id, and createdAt stay. */
+  replaceImage(id: string, media: { image: Blob; thumb: Blob | null; imageHash: string }): Promise<VocabularyCard>;
   saveAudio(id: string, language: 'zh' | 'sv', audio: Blob): Promise<VocabularyCard>;
   remove(id: string): Promise<void>;
   syncGet(localId: string): Promise<SyncRow | null>;
@@ -93,6 +96,22 @@ const SUMMARY = 'summaries';
 const THUMBS = 'thumbs';
 const SYNC = 'sync';
 const DB_VERSION = 2;
+
+export type CardTextPatch = {
+  zh?: string;
+  sv?: string;
+  article?: SwedishArticle | null;
+  category?: VocabularyCategoryId;
+  categorySource?: 'auto' | 'manual' | 'unset';
+};
+
+/** Drops cached speech only for the language whose spoken line changed. */
+export function applyCardPatch(card: VocabularyCard, patch: CardTextPatch): VocabularyCard {
+  const next: VocabularyCard = { ...card, ...patch };
+  if (spokenLabel(card, 'zh') !== spokenLabel(next, 'zh')) next.zhAudio = null;
+  if (spokenLabel(card, 'sv') !== spokenLabel(next, 'sv')) next.svAudio = null;
+  return next;
+}
 
 export type NewVocabularyCard = {
   id?: string;
@@ -183,7 +202,17 @@ export function createMemoryVocabularyLibrary(): VocabularyLibrary {
     async update(id, patch) {
       const card = cards.get(id);
       if (!card) throw new Error('MISSING_CARD');
-      const next = { ...card, ...patch };
+      const next = applyCardPatch(card, patch);
+      cards.set(id, next);
+      return next;
+    },
+    async replaceImage(id, media) {
+      const card = cards.get(id);
+      if (!card) throw new Error('MISSING_CARD');
+      if (card.imageHash === media.imageHash) return card;
+      const clash = [...cards.values()].find((item) => item.imageHash === media.imageHash);
+      if (clash) throw new DuplicateCardError(clash.id);
+      const next = { ...card, image: media.image, thumb: media.thumb, imageHash: media.imageHash };
       cards.set(id, next);
       return next;
     },
@@ -313,9 +342,24 @@ export function createIndexedDbVocabularyLibrary(): VocabularyLibrary {
       return txOf([STORE, SUMMARY, THUMBS], 'readwrite', async (tx) => {
         const current = await requestToPromise(tx.objectStore(STORE).get(id) as IDBRequest<VocabularyCard | undefined>);
         if (!current) throw new Error('MISSING_CARD');
-        const next = { ...current, ...patch };
+        const next = applyCardPatch(current, patch);
         await requestToPromise(tx.objectStore(STORE).put(next));
         writeSummary(tx, next);
+        return next;
+      });
+    },
+    async replaceImage(id, media) {
+      return txOf([STORE, SUMMARY, THUMBS], 'readwrite', async (tx) => {
+        const store = tx.objectStore(STORE);
+        const current = await requestToPromise(store.get(id) as IDBRequest<VocabularyCard | undefined>);
+        if (!current) throw new Error('MISSING_CARD');
+        if (current.imageHash === media.imageHash) return current;
+        const clash = await requestToPromise(store.index('imageHash').get(media.imageHash) as IDBRequest<VocabularyCard | undefined>);
+        if (clash && clash.id !== id) throw new DuplicateCardError(clash.id);
+        const next: VocabularyCard = { ...current, image: media.image, thumb: media.thumb, imageHash: media.imageHash };
+        await requestToPromise(store.put(next));
+        writeSummary(tx, next);
+        if (!next.thumb || next.thumb.size === 0) tx.objectStore(THUMBS).delete(next.id);
         return next;
       });
     },

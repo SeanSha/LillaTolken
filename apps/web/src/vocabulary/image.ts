@@ -2,7 +2,13 @@ import { sniffImage, VOCABULARY_LIMITS } from '@kt/shared';
 import { sha256Hex } from './hash';
 
 export const SOURCE_IMAGE_BYTES = 12 * 1024 * 1024;
+/**
+ * Longest edge of the JPEG sent to vision. Detail "auto" bills image tokens from the
+ * provider's own resize (short side about 768px, then tiles), folded into input_tokens.
+ * A smaller edge does not reduce that tile count, and JPEG quality only affects bytes.
+ */
 export const MAX_EDGE = 1280;
+export const JPEG_QUALITIES = [0.82, 0.7, 0.55, 0.4] as const;
 
 const SOURCE_TYPES = new Set(['', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
 
@@ -47,7 +53,7 @@ async function canvasJpeg(source: CanvasImageSource, width: number, height: numb
   const context = canvas.getContext('2d');
   if (!context) throw new VocabImageError('DECODE');
   context.drawImage(source, 0, 0, size.width, size.height);
-  for (const quality of [0.82, 0.7, 0.55, 0.4]) {
+  for (const quality of JPEG_QUALITIES) {
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((next) => resolve(next), 'image/jpeg', quality));
     if (blob && blob.size > 0 && blob.size <= VOCABULARY_LIMITS.maxImageBytes) return blob;
   }

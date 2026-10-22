@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AppError } from '@kt/shared';
 import { identifyImage } from '../../apps/web/src/vocabulary/api';
-import { stepAfterIdentify } from '../../apps/web/src/vocabulary/flow';
+import { claimRecognition, releaseRecognition, stepAfterIdentify } from '../../apps/web/src/vocabulary/flow';
 import { canSaveDraft, labelForSpeech, synthesizeLabel } from '../../apps/web/src/vocabulary/speech';
 
 describe('vocabulary speech and identify client', () => {
@@ -46,6 +46,15 @@ describe('vocabulary speech and identify client', () => {
     await synthesizeLabel(draft, 'sv', { fetchImpl: localFetch, cardId: '11111111-1111-4111-8111-111111111111', preset: 'mock' });
     expect(localHeaders[0]?.['X-Provider-Preset']).toBe('local');
     expect(localHeaders[1]?.['X-Provider-Preset']).toBe('cloud');
+  });
+
+  it('lets the first recognition through and blocks a second tap until it finishes', () => {
+    const lock = { current: false };
+    expect(claimRecognition(lock)).toBe('start');
+    expect(claimRecognition(lock)).toBe('blocked');
+    expect(lock.current).toBe(true);
+    releaseRecognition(lock);
+    expect(claimRecognition(lock)).toBe('start');
   });
 
   it('refuses to save an empty correction and does not invent a word for an uncertain photo', () => {

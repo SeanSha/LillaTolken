@@ -2,6 +2,7 @@
 // METADATA ONLY: none of these shapes can carry audio, transcripts, prompts or translations.
 import type { ResponseType } from './evaluation';
 import type { Direction, ProviderPreset } from './types';
+import type { VocabActionKind } from './vocabulary';
 
 export const AI_STAGES = ['ASR', 'INTERPRET', 'TRANSLATE', 'TTS', 'IDENTIFY'] as const;
 export type AiStage = (typeof AI_STAGES)[number];
@@ -476,6 +477,9 @@ export type VocabularyUsageReport = {
   months: Array<UsageBucket & { bucket: string }>;
   cards: Array<UsageBucket & { cardId: string }>;
   note: string;
+  /** Not model calls. They are not included in `identify` or the token totals. */
+  actions: Record<VocabActionKind, number>;
+  actionNote: string;
 };
 
 export type CloudHealth = { configured: boolean; modelTag: string };

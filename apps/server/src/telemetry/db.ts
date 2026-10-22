@@ -5,14 +5,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { randomBytes, randomInt } from 'node:crypto';
-import type { CostDetail, Direction, EvalEvent, EvalEnvironment, EvalNetwork, EvalNoise, ModelConfig, ProviderPreset, TaskSnapshot, TestRun } from '@kt/shared';
+import type { CostDetail, Direction, EvalEvent, EvalEnvironment, EvalNetwork, EvalNoise, ModelConfig, ProviderPreset, TaskSnapshot, TestRun, VocabActionKind } from '@kt/shared';
 import { TEST_CODE_ALPHABET } from '@kt/shared';
 import type { AiRequestRow } from '@kt/shared';
 import type { ModelConfigSnapshot } from './modelConfig';
 import { stableModelConfigId } from './modelConfig';
 
 /** Bump with a new entry in MIGRATIONS. Migrations are additive and never drop user data. */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -199,6 +199,16 @@ const MIGRATIONS: Record<number, string> = {
     ALTER TABLE events ADD COLUMN response_trigger TEXT;
     ALTER TABLE events ADD COLUMN response_latency_ms REAL;
     ALTER TABLE events ADD COLUMN response_id TEXT;
+  `,
+  5: `
+    CREATE TABLE vocab_actions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      card_id TEXT,
+      preset TEXT NOT NULL
+    );
+    CREATE INDEX idx_vocab_actions_at ON vocab_actions(at);
   `,
 };
 
@@ -449,6 +459,17 @@ export class TelemetryDb {
       if (snap.testRunId) this.touchTestRun(snap.testRunId, r.endedAt);
       return rid;
     });
+  }
+
+  /** A photo-vocabulary decision that did not call a model. Words and photos are not stored. */
+  recordVocabAction(action: { kind: VocabActionKind; cardId: string | null; preset: ProviderPreset; at?: string }): void {
+    this.run(
+      'INSERT INTO vocab_actions(at, kind, card_id, preset) VALUES (?, ?, ?, ?)',
+      action.at ?? new Date().toISOString(),
+      action.kind,
+      action.cardId,
+      action.preset,
+    );
   }
 
   // ---------------------------------------------------------------- client events

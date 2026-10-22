@@ -35,9 +35,10 @@ import type {
   TimeseriesPoint,
   UsageBucket,
   VocabularyUsageReport,
+  VocabActionKind,
   YesNoNA,
 } from '@kt/shared';
-import { AI_STAGES, P90_MIN_SAMPLES, PROVIDER_PRESETS, REQUEST_STATUSES, RESPONSE_TYPES } from '@kt/shared';
+import { AI_STAGES, P90_MIN_SAMPLES, PROVIDER_PRESETS, REQUEST_STATUSES, RESPONSE_TYPES, VOCAB_ACTIONS } from '@kt/shared';
 import type { SQLInputValue } from 'node:sqlite';
 import { asEnvironment, asNetwork, asNoise, type TelemetryDb } from './db';
 
@@ -820,6 +821,9 @@ export function annotationStats(db: TelemetryDb, f: MonitorFilters): AnnotationS
 const USAGE_NOTE =
   'Photo Vocabulary and translation are two slices of the same cloud request rows. Adding them again on top of the Cloud total would count twice. Cached audio replays are not rows. A retry is a separate API call and is counted once.';
 
+const ACTION_NOTE =
+  'Identify rows are the vision calls and keep the token totals above. A duplicate word is counted after that call and does not refund it. Keeping the old photo, or replacing a photo after a duplicate word, does not start another vision call. Reusing an identical photo, replacing a photo from the card, and blocking a repeated tap are the actions that skip a vision call.';
+
 function bucket(row: Row | undefined): UsageBucket {
   const requests = Number(row?.requests ?? 0);
   const failed = Number(row?.failed ?? 0);
@@ -882,6 +886,26 @@ export function vocabularyUsage(db: TelemetryDb, f: MonitorFilters): VocabularyU
       ...params,
     )
     .map((row) => ({ cardId: String(row.card_id), ...bucket(row) }));
+  const actionParts: string[] = [];
+  const actionParams: SQLInputValue[] = [];
+  if (f.from) {
+    actionParts.push('at >= ?');
+    actionParams.push(f.from);
+  }
+  if (f.to) {
+    actionParts.push('at <= ?');
+    actionParams.push(f.to);
+  }
+  if (f.preset) {
+    actionParts.push('preset = ?');
+    actionParams.push(f.preset);
+  }
+  const actionWhere = actionParts.length ? ` WHERE ${actionParts.join(' AND ')}` : '';
+  const actions = Object.fromEntries(VOCAB_ACTIONS.map((kind) => [kind, 0])) as Record<VocabActionKind, number>;
+  for (const row of db.all<Row>(`SELECT kind, COUNT(*) AS n FROM vocab_actions${actionWhere} GROUP BY kind`, ...actionParams)) {
+    const kind = String(row.kind) as VocabActionKind;
+    if (kind in actions) actions[kind] = Number(row.n ?? 0);
+  }
   return {
     vocabulary: one('vocabulary'),
     translation: one('translate'),
@@ -892,6 +916,8 @@ export function vocabularyUsage(db: TelemetryDb, f: MonitorFilters): VocabularyU
     months: series('%Y-%m'),
     cards,
     note: USAGE_NOTE,
+    actions,
+    actionNote: ACTION_NOTE,
   };
 }
 

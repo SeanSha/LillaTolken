@@ -66,6 +66,42 @@ describe('vocabulary cost accounting', () => {
     expect(report.cards.map((card) => card.cardId)).toEqual(['card-1']);
     expect(report.cards[0]?.requests).toBe(3);
     expect(report.note).toMatch(/twice/i);
+    expect(report.actions.card_created).toBe(0);
+    db.close();
+  });
+
+  it('counts photo actions apart from vision calls', () => {
+    const db = new TelemetryDb(':memory:');
+    db.recordRequest(
+      row({
+        taskId: 'vocab.card-1',
+        stage: 'IDENTIFY',
+        feature: 'vocabulary',
+        cardId: 'card-1',
+        costUsd: 0.002,
+        costBasis: 'reported_usage',
+        promptTokens: 800,
+        outputTokens: 20,
+      }),
+    );
+    db.recordVocabAction({ kind: 'duplicate_detected', cardId: 'card-1', preset: 'cloud' });
+    db.recordVocabAction({ kind: 'keep_existing_photo', cardId: 'card-1', preset: 'cloud' });
+    db.recordVocabAction({ kind: 'direct_replace', cardId: 'card-2', preset: 'cloud' });
+    db.recordVocabAction({ kind: 'exact_image_reuse', cardId: 'card-1', preset: 'cloud' });
+    db.recordVocabAction({ kind: 'prevented_duplicate_request', cardId: null, preset: 'local' });
+    db.recordVocabAction({ kind: 'card_created', cardId: 'card-3', preset: 'cloud' });
+
+    const report = vocabularyUsage(db, { preset: 'cloud' });
+    expect(report.identify.requests).toBe(1);
+    expect(report.identify.knownUsd).toBeCloseTo(0.002);
+    expect(report.actions.duplicate_detected).toBe(1);
+    expect(report.actions.keep_existing_photo).toBe(1);
+    expect(report.actions.direct_replace).toBe(1);
+    expect(report.actions.exact_image_reuse).toBe(1);
+    expect(report.actions.prevented_duplicate_request).toBe(0);
+    expect(report.actions.card_created).toBe(1);
+    expect(report.actions.replace_after_duplicate).toBe(0);
+    expect(report.actionNote).toMatch(/skip a vision call/i);
     db.close();
   });
 });

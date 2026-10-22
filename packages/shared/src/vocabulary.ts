@@ -108,3 +108,19 @@ export function swedishWithArticle(article: SwedishArticle | null, sv: string): 
   const word = sv.trim();
   return article ? `${article} ${word}` : word;
 }
+
+/**
+ * Photo-vocabulary actions that are not model calls.
+ * Token totals stay on the identify and speech rows. These counts are separate.
+ */
+export const VOCAB_ACTIONS = [
+  'duplicate_detected',
+  'keep_existing_photo',
+  'replace_after_duplicate',
+  'direct_replace',
+  'exact_image_reuse',
+  'prevented_duplicate_request',
+  'card_created',
+] as const;
+
+export type VocabActionKind = (typeof VOCAB_ACTIONS)[number];
