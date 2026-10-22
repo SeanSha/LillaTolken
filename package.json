@@ -24,6 +24,7 @@
     "local:start": "npm run local:start -w @kt/server --silent",
     "local:smoke": "npm run local:smoke -w @kt/server --silent",
     "local:eval": "npm run local:eval -w @kt/server --silent --",
+    "eval:narratives": "npm run eval:narratives -w @kt/server --silent --",
     "local:e2e": "npm run local:e2e -w @kt/server --silent --",
     "launcher:install": "zsh launcher/install.sh"
   },

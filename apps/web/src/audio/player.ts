@@ -44,8 +44,12 @@ export class AudioPlayer {
     );
   }
 
-  /** Resolves 'ended' when playback completes, 'stopped' if interrupted; rejects if the browser refuses/decoding fails. */
-  play(audio: AudioData): Promise<PlayResult> {
+  /**
+   * Resolves 'ended' when playback completes, 'stopped' if interrupted; rejects if the browser refuses/decoding fails.
+   * `onAudible` fires once, on the media `playing` event — not when play() is called and not when the file has downloaded.
+   * A later `playing` from resume or a second play() of this call is ignored. The caller dedupes replays of the same response.
+   */
+  play(audio: AudioData, hooks?: { onAudible?: () => void }): Promise<PlayResult> {
     setAudioSession('playback');
     this.stop();
     const el = this.ensure();
@@ -55,7 +59,14 @@ export class AudioPlayer {
     el.src = this.url;
     this.startedAt = performance.now();
     return new Promise<PlayResult>((resolve, reject) => {
+      let audible = false;
+      const onPlaying = () => {
+        if (token !== this.token || audible) return;
+        audible = true;
+        hooks?.onAudible?.();
+      };
       const cleanup = () => {
+        el.removeEventListener('playing', onPlaying);
         el.onended = null;
         el.onerror = null;
         this.finish = null;
@@ -65,6 +76,7 @@ export class AudioPlayer {
         cleanup();
         resolve(r);
       };
+      el.addEventListener('playing', onPlaying);
       el.onended = () => {
         if (token !== this.token) return;
         this.lastCompletedMs = Math.round(performance.now() - this.startedAt);

@@ -5,7 +5,8 @@ import { SpeechPrompts } from '../audio/prompts';
 import { AudioStore } from '../audio/audioStore';
 import { MediaRecorderRecorder, ScriptedRecorder } from '../audio/recorder';
 import { createDialogueMachine } from '../dialogue/machine';
-import type { Recorder } from '../dialogue/types';
+import { ResponseLatencyTracker } from '../dialogue/responseLatency';
+import type { LogFields, Recorder } from '../dialogue/types';
 import { createApiBundle, fetchHealth, type Health, type RequestContext } from './apiClient';
 import { EventLogger } from './eventLogger';
 import { captureTestCodeFromUrl, getTestCode } from './testSession';
@@ -14,6 +15,8 @@ import { settings } from './settings';
 export const audioStore = new AudioStore();
 export const player = new AudioPlayer();
 export const prompts = new SpeechPrompts();
+/** Shared with the dialogue machine so input time and audible start use one monotonic clock. */
+export const responseLatency = new ResponseLatencyTracker();
 export const mockScript = new MockScript(settings.get().mockScenarioId);
 
 let health: Health | null = null;
@@ -43,9 +46,11 @@ if (typeof window !== 'undefined') {
 // Non-content telemetry context for backend requests: which session/direction the CURRENT task
 // belongs to. Learned from the machine's own TASK_STARTED event; applied only to that task id.
 const taskContext = new Map<string, RequestContext>();
+let latestLog: LogFields | null = null;
 
 export const logger = new EventLogger({
   onLog: (fields) => {
+    if (fields.taskId) latestLog = fields;
     if (fields.eventType === 'TASK_STARTED' && fields.taskId) {
       taskContext.clear(); // only the current task matters
       taskContext.set(fields.taskId, { sessionId: fields.sessionId, direction: fields.direction, testCode: getTestCode() });
@@ -124,6 +129,24 @@ const randomId = () =>
     ? crypto.randomUUID().slice(0, 12)
     : Math.random().toString(36).slice(2, 14);
 
+/** Called from the media `playing` handler. No-op for replays and when nothing is armed. */
+export function reportAudibleStart(): void {
+  const sample = responseLatency.noteAudibleStart(performance.now());
+  const fields = latestLog;
+  if (!sample || !fields?.taskId) return;
+  logger.log({
+    sessionId: fields.sessionId,
+    taskId: fields.taskId,
+    providerPreset: fields.providerPreset,
+    direction: fields.direction,
+    eventType: 'PLAYBACK_STARTED',
+    responseId: sample.responseId,
+    responseType: sample.responseType,
+    ...(sample.responseTrigger ? { responseTrigger: sample.responseTrigger } : {}),
+    ...(sample.responseLatencyMs !== undefined ? { responseLatencyMs: sample.responseLatencyMs } : {}),
+  });
+}
+
 export const dialogueMachine = createDialogueMachine({
   providers,
   recorder,
@@ -133,6 +156,8 @@ export const dialogueMachine = createDialogueMachine({
   stopPlayback: () => player.stop(),
   log: (fields) => logger.log(fields),
   lastPlaybackMs: () => player.lastPlaybackMs(),
+  responses: responseLatency,
+  monoNow: () => performance.now(),
   newId: randomId,
   now: () => Date.now(),
   onTaskStarted: ({ preset }) => {

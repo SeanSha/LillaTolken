@@ -12,6 +12,7 @@ import {
 import { AudioStore } from '../../apps/web/src/audio/audioStore';
 import { ScriptedRecorder } from '../../apps/web/src/audio/recorder';
 import { createDialogueMachine } from '../../apps/web/src/dialogue/machine';
+import type { ResponseLatencyTracker } from '../../apps/web/src/dialogue/responseLatency';
 import type { DialogueEvent, LogFields, Recorder } from '../../apps/web/src/dialogue/types';
 import { createMockProvider } from '../../apps/server/src/providers/mock';
 
@@ -45,6 +46,8 @@ export type HarnessOptions = {
   bundles?: Partial<Record<ProviderPreset, ProviderBundle>>;
   recorder?: Recorder;
   clock?: SimulatedClock;
+  responses?: ResponseLatencyTracker;
+  monoNow?: () => number;
 };
 
 export function createHarness(opts: HarnessOptions = {}) {
@@ -72,6 +75,8 @@ export function createHarness(opts: HarnessOptions = {}) {
     log: (f: LogFields) => logs.push(f),
     newId: () => `id${++counter}`,
     now: () => Date.now(),
+    responses: opts.responses,
+    monoNow: opts.monoNow,
   };
   const machine = createDialogueMachine(deps);
   const actor = createActor(machine, { clock, input: { sessionId: 'session-1', preset: opts.preset ?? 'mock' } });

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { AiStage, MonitorHealthResponse, PresetSummary } from '@kt/shared';
+import type { AiStage, LatencyStats, MonitorHealthResponse, PresetSummary, ResponseLatencyReport } from '@kt/shared';
 import { monitorApi } from './api';
-import { BarChart, LineChart } from './charts';
+import { BarChart, CategoryChart, LineChart } from './charts';
 import { useMonitor } from './context';
 import { fmtInt, fmtMin, fmtMs, fmtPct, fmtUsd } from './format';
 import { usePolled } from './hooks';
@@ -56,12 +56,14 @@ export function OverviewTab() {
         <Card
           label="Stage latency (avg)"
           value={fmtMs(s?.requestLatency.avgMs)}
-          hint={s ? `p95 ${fmtMs(s.requestLatency.p95Ms)} — descriptive, n=${s.requestLatency.count}${s.requestLatency.count < 20 ? ' (small sample)' : ''}` : undefined}
+          hint={s ? `p95 ${fmtMs(s.requestLatency.p95Ms)} — model calls, n=${s.requestLatency.count}${s.requestLatency.count < 20 ? ' (small sample)' : ''}` : undefined}
         />
+        <ResponseLatencyCard report={s?.responseLatency} />
       </div>
       <p className="mon-note">
-        Local API: $0 (hardware/power excluded). Mock: N/A. Cloud figures are an estimate/attribution view, not provider billing. Latency statistics cover real providers only (Mock's instant fake is excluded unless Provider = mock).
+        Local API: $0 (hardware/power excluded). Mock: N/A. Cloud figures are an estimate/attribution view, not provider billing. Stage latency is per model call. Response latency is the wait from the paired input until audio actually starts, and is not averaged with stage latency. Mock is excluded unless Provider = mock.
       </p>
+      {s?.responseLatency && <ResponseLatencyDetail report={s.responseLatency} />}
 
       <div className="mon-row">
         <h3>Charts</h3>
@@ -92,6 +94,16 @@ export function OverviewTab() {
             { name: 'cloud', color: '#2563eb', values: ts.map((p) => p.byPreset.cloud?.avgMs ?? null) },
             { name: 'local', color: '#16a34a', values: ts.map((p) => p.byPreset.local?.avgMs ?? null) },
             { name: 'mock', color: '#94a3b8', values: ts.map((p) => p.byPreset.mock?.avgMs ?? null) },
+          ]}
+        />
+        <LineChart
+          title="Cloud vs Local response latency (avg until first audio)"
+          labels={labels}
+          bucket={bucket}
+          format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`)}
+          series={[
+            { name: 'cloud', color: '#2563eb', values: ts.map((p) => p.responseLatencyAvgMs?.cloud ?? null) },
+            { name: 'local', color: '#16a34a', values: ts.map((p) => p.responseLatencyAvgMs?.local ?? null) },
           ]}
         />
       </div>
@@ -158,6 +170,97 @@ export function OverviewTab() {
 
       <HealthPanel health={health.data} error={health.error?.code} />
     </div>
+  );
+}
+
+function latencyHint(stats: LatencyStats | null | undefined): string {
+  if (!stats || stats.count === 0) return 'n=0 valid responses';
+  return `median ${fmtMs(stats.medianMs)} · p95 ${fmtMs(stats.p95Ms)} · n=${stats.count} valid responses${stats.count < 20 ? ' (small sample)' : ''}`;
+}
+
+function ResponseLatencyCard({ report }: { report: ResponseLatencyReport | undefined }) {
+  if (!report || report.headline === null) {
+    const cloud = report?.cloud;
+    const local = report?.local;
+    return (
+      <Card
+        testId="response-latency"
+        label="Response latency"
+        value={report ? 'Cloud / Local' : '—'}
+        hint={
+          report
+            ? `not combined · Cloud avg ${fmtMs(cloud?.avgMs)} (n=${cloud?.count ?? 0}) · Local avg ${fmtMs(local?.avgMs)} (n=${local?.count ?? 0})`
+            : undefined
+        }
+      />
+    );
+  }
+  return (
+    <Card
+      testId="response-latency"
+      label="Response latency (avg)"
+      value={fmtMs(report.headline.avgMs)}
+      hint={latencyHint(report.headline)}
+    />
+  );
+}
+
+function ResponseLatencyDetail({ report }: { report: ResponseLatencyReport }) {
+  const rows = [
+    { label: 'All spoken responses', cloud: report.cloud, local: report.local },
+    ...report.byType.map((row) => ({
+      label: row.responseType === 'translation' ? 'Final translation' : row.responseType[0]!.toUpperCase() + row.responseType.slice(1),
+      cloud: row.cloud,
+      local: row.local,
+    })),
+  ];
+  return (
+    <section data-testid="response-latency-detail">
+      <h3>Response latency</h3>
+      <p className="mon-note">{report.note}</p>
+      {report.unavailable > 0 && <p className="mon-note">Playbacks without a paired trigger: {report.unavailable} (omitted from the averages).</p>}
+      {report.omittedTasks > 0 && <p className="mon-note">Delivered audio tasks with no paired playback-start sample: {report.omittedTasks}. Older records stay unavailable.</p>}
+      <table className="mon-table">
+        <thead>
+          <tr>
+            <th>Response</th>
+            <th>Cloud avg</th>
+            <th>Cloud median</th>
+            <th>Cloud p95</th>
+            <th>Cloud n</th>
+            <th>Local avg</th>
+            <th>Local median</th>
+            <th>Local p95</th>
+            <th>Local n</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td>{row.label}</td>
+              <td>{fmtMs(row.cloud.avgMs)}</td>
+              <td>{fmtMs(row.cloud.medianMs)}</td>
+              <td>{fmtMs(row.cloud.p95Ms)}</td>
+              <td>{row.cloud.count}</td>
+              <td>{fmtMs(row.local.avgMs)}</td>
+              <td>{fmtMs(row.local.medianMs)}</td>
+              <td>{fmtMs(row.local.p95Ms)}</td>
+              <td>{row.local.count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mon-charts mon-charts-fit">
+        <CategoryChart
+          title="Response latency distribution (valid responses)"
+          labels={report.buckets.map((b) => b.label)}
+          series={[
+            { name: 'cloud', color: '#2563eb', values: report.buckets.map((b) => b.cloud) },
+            { name: 'local', color: '#16a34a', values: report.buckets.map((b) => b.local) },
+          ]}
+        />
+      </div>
+    </section>
   );
 }
 

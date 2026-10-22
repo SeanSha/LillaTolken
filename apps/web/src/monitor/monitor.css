@@ -36,6 +36,7 @@ label { display: inline-flex; flex-direction: column; gap: 2px; font-size: 12px;
 .mon-compare .mon-card h4 { margin: 0 0 6px; }
 .mon-compare .mon-card p { margin: 4px 0; font-size: 13px; }
 .mon-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+.mon-charts-fit { grid-template-columns: minmax(0, 520px); }
 .mon-chart { margin: 0; background: #fff; border: 1px solid #e3e6ec; border-radius: 8px; padding: 8px 10px; }
 .mon-chart figcaption { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
 .mon-chart svg { width: 100%; height: auto; }

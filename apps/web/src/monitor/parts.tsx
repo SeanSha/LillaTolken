@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import type { MonitorApiError } from './api';
 
-export function Card({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'warn' }) {
+export function Card({ label, value, hint, tone, testId }: { label: string; value: string; hint?: string; tone?: 'warn'; testId?: string }) {
   return (
-    <div className={`mon-card${tone ? ` ${tone}` : ''}`}>
+    <div className={`mon-card${tone ? ` ${tone}` : ''}`} data-testid={testId}>
       <div className="mon-card-label">{label}</div>
       <div className="mon-card-value">{value}</div>
       {hint && <div className="mon-card-hint">{hint}</div>}

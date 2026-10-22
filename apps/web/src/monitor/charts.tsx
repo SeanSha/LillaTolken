@@ -84,6 +84,60 @@ export function BarChart({ title, labels, values, color = '#4c8bf5', format = (v
   );
 }
 
+/** Bars whose labels are already display text (a latency histogram), not timestamps. */
+export function CategoryChart({ title, labels, series, format = (v: number) => String(v) }: {
+  title: string;
+  labels: string[];
+  series: Series[];
+  format?: (v: number) => string;
+}) {
+  const all = series.flatMap((s) => s.values).filter((v): v is number => v !== null);
+  if (labels.length === 0 || all.every((v) => v === 0)) return <Empty title={title} />;
+  const max = niceMax(Math.max(...all));
+  const plotW = W - PAD.l - PAD.r;
+  const plotH = H - PAD.t - PAD.b;
+  const group = plotW / labels.length;
+  const bw = Math.min(18, (group / Math.max(series.length, 1)) * 0.7);
+  return (
+    <Frame
+      title={title}
+      legend={series.map((s) => (
+        <span key={s.name}>
+          <i style={{ background: s.color }} /> {s.name}
+        </span>
+      ))}
+    >
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
+        {[0, 0.5, 1].map((t) => (
+          <g key={t}>
+            <line x1={PAD.l} x2={W - PAD.r} y1={PAD.t + plotH * (1 - t)} y2={PAD.t + plotH * (1 - t)} stroke="#e3e6ec" />
+            <text x={PAD.l - 4} y={PAD.t + plotH * (1 - t) + 3} fontSize="9" textAnchor="end" fill="#667085">
+              {format(max * t)}
+            </text>
+          </g>
+        ))}
+        {labels.map((label, i) => (
+          <text key={label} x={PAD.l + group * i + group / 2} y={H - 6} fontSize="9" textAnchor="middle" fill="#667085">
+            {label}
+          </text>
+        ))}
+        {series.map((s, si) =>
+          s.values.map((v, i) => {
+            const value = v ?? 0;
+            const h = (value / max) * plotH;
+            const x = PAD.l + group * i + (group - bw * series.length) / 2 + si * bw;
+            return (
+              <rect key={`${s.name}-${labels[i]}`} x={x} y={PAD.t + plotH - h} width={bw} height={Math.max(h, value > 0 ? 1 : 0)} fill={s.color} rx="2">
+                <title>{`${s.name} ${labels[i]}: ${format(value)}`}</title>
+              </rect>
+            );
+          }),
+        )}
+      </svg>
+    </Frame>
+  );
+}
+
 export function LineChart({ title, labels, series, format = (v: number) => String(Math.round(v)), bucket }: {
   title: string;
   labels: string[];

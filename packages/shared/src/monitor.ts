@@ -1,5 +1,6 @@
 // Types shared by the Node monitoring API and the /monitor dashboard (docs/SYSTEM_DESIGN.md 6).
 // METADATA ONLY: none of these shapes can carry audio, transcripts, prompts or translations.
+import type { ResponseType } from './evaluation';
 import type { Direction, ProviderPreset } from './types';
 
 export const AI_STAGES = ['ASR', 'INTERPRET', 'TRANSLATE', 'TTS', 'IDENTIFY'] as const;
@@ -126,6 +127,10 @@ export type EventRow = {
   stageDurationMs: number | null;
   elapsedMs: number | null;
   errorCategory: string | null;
+  responseType: ResponseType | null;
+  responseTrigger: 'audio_input' | 'confirmation_tap' | null;
+  /** Null when this playback was not paired. Never a stand-in zero. */
+  responseLatencyMs: number | null;
 };
 
 export type Page<T> = { rows: T[]; total: number; limit: number; offset: number };
@@ -205,6 +210,9 @@ export type ConditionModelSplit = {
   tasksFailed: number;
   taskElapsed: DistributionMs;
   stages: StageDistribution[];
+  /** End-of-input → first audible audio. Not ASR, LLM, TTS generation, task duration, playback length, or HTTP RTT. */
+  responseLatency: LatencyStats;
+  responseByType: Array<{ responseType: ResponseType } & LatencyStats>;
   recordedAudioMs: number;
   costKnownUsd: number;
   costEstimatedUsd: number;
@@ -230,6 +238,9 @@ export type ConditionComparison = {
   configsDiffer: boolean;
   taskElapsed: DistributionMs;
   stages: StageDistribution[];
+  /** End-of-input → first audible audio. Withheld (averages null) when model configurations differ. */
+  responseLatency: LatencyStats;
+  responseByType: Array<{ responseType: ResponseType } & LatencyStats>;
   /** Application-level HTTP round trip. Not ASR/LLM/TTS latency and not signal strength. */
   httpRtt: DistributionMs;
   recordedAudioMs: number;
@@ -266,6 +277,43 @@ export type MonitorFilters = {
 };
 
 export type LatencyStats = { count: number; avgMs: number | null; medianMs: number | null; p95Ms: number | null };
+
+export type ResponseLatencyBucket = { label: string; cloud: number; local: number };
+
+/**
+ * End-of-input to first audible playback. Cloud and Local are never averaged together.
+ * `headline` is set only when a single real preset is in view. Null means both presets have
+ * samples and must be read separately. Incomplete observations are excluded from every stat.
+ */
+export type ResponseLatencyReport = {
+  headline: LatencyStats | null;
+  cloud: LatencyStats;
+  local: LatencyStats;
+  byType: Array<{ responseType: ResponseType; cloud: LatencyStats; local: LatencyStats }>;
+  buckets: ResponseLatencyBucket[];
+  /** PLAYBACK_STARTED rows with no paired latency. */
+  unavailable: number;
+  /** Delivered audio tasks that have no paired playback-start sample (including older records). */
+  omittedTasks: number;
+  note: string;
+};
+
+export type ResponseLatencyExportRow = {
+  ts: string;
+  taskId: string;
+  sessionId: string;
+  testRunId: string | null;
+  preset: ProviderPreset;
+  direction: Direction | null;
+  environment: EvalEnvironment;
+  networkType: EvalNetwork;
+  noiseLevel: EvalNoise;
+  modelConfigId: string | null;
+  responseType: ResponseType | null;
+  responseTrigger: 'audio_input' | 'confirmation_tap' | null;
+  responseLatencyMs: number | null;
+  responseId: string | null;
+};
 
 export type StageSummary = LatencyStats & {
   stage: AiStage;
@@ -316,6 +364,8 @@ export type SummaryResponse = {
   errorRate: number | null;
   taskElapsed: LatencyStats; // delivered tasks only
   requestLatency: LatencyStats;
+  /** Waiting time from the paired input to the first audible system response. Not request latency. */
+  responseLatency: ResponseLatencyReport;
   stages: StageSummary[];
   presets: PresetSummary[];
   models: ModelSummary[];
@@ -341,6 +391,8 @@ export type TimeseriesPoint = {
   cloudUnknown: number;
   avgMs: Partial<Record<AiStage, number>>;
   byPreset: Partial<Record<ProviderPreset, { requests: number; avgMs: number | null }>>;
+  /** Mean response latency in this bucket. Separate from `byPreset.avgMs` (per-request model time). */
+  responseLatencyAvgMs: { cloud: number | null; local: number | null };
 };
 
 export type PricingResponse = {

@@ -16,6 +16,7 @@ import {
   type InterpretationResult,
   type Language,
   type LastDelivered,
+  type ResponseType,
 } from '@kt/shared';
 import type {
   DialogueDeps,
@@ -97,6 +98,15 @@ export function createDialogueMachine(deps: DialogueDeps) {
   const emitStage = (context: MachineContext, eventType: EvalEventType, stage: EvalStage, durationMs: number) =>
     emit(context, eventType, { stage, stageDurationMs: durationMs });
 
+  // Response latency uses deps.monoNow only. Wall-clock deps.now() stays on the existing events.
+  const markInputFinished = () => {
+    if (deps.responses && deps.monoNow) deps.responses.noteInputFinished(deps.monoNow());
+  };
+  const markConfirmationTap = () => {
+    if (deps.responses && deps.monoNow) deps.responses.noteConfirmationTap(deps.monoNow());
+  };
+  const armResponse = (responseType: ResponseType) => deps.responses?.arm(responseType);
+
   const speakerLanguage = (context: MachineContext): Language =>
     context.task ? languageOfSpeaker(context.task.direction) : 'zh';
 
@@ -149,6 +159,7 @@ export function createDialogueMachine(deps: DialogueDeps) {
 
   const completeDelivery = (context: MachineContext, mode: DeliveryMode) => {
     if (mode === 'audio') emit(context, 'PLAYBACK_COMPLETED', { deliveryMode: mode, playbackMs: deps.lastPlaybackMs?.() });
+    if (mode === 'text_only') deps.responses?.abandonUnplayed();
     emit(context, 'TASK_COMPLETED', { deliveryMode: mode });
   };
 
@@ -267,9 +278,11 @@ export function createDialogueMachine(deps: DialogueDeps) {
       logSwitchNo: ({ context }) => emit(context, 'SWITCH_NO'),
       clearSwitchRequest: assign({ pendingDirection: () => null, safeReturnState: () => null }),
       logCancelled: ({ context }) => {
+        deps.responses?.reset();
         if (context.task) emit(context, 'TASK_CANCELLED');
       },
       logTaskStarted: ({ context }) => {
+        deps.responses?.reset();
         emit(context, 'TASK_STARTED');
         if (context.task) {
           deps.onTaskStarted?.({ id: context.task.id, direction: context.task.direction, preset: context.task.preset });
@@ -481,7 +494,13 @@ export function createDialogueMachine(deps: DialogueDeps) {
             exit: 'stopSpeaking',
             on: {
               CONTINUE_SPEAKING: { target: '#recStarting', actions: ({ context }) => emit(context, 'CONTINUE_SELECTED') },
-              FINISH_INPUT: { target: '#transcribing', actions: ({ context }) => emit(context, 'INPUT_FINISHED') },
+              FINISH_INPUT: {
+                target: '#transcribing',
+                actions: ({ context }) => {
+                  emit(context, 'INPUT_FINISHED');
+                  markInputFinished();
+                },
+              },
               SWITCH_REQUESTED: sw('segmentDecision'),
             },
           },
@@ -628,6 +647,7 @@ export function createDialogueMachine(deps: DialogueDeps) {
                     ),
                     ({ context, event }) => emitStage(context, 'INTERPRETATION_READY', 'interpret', event.output.durationMs),
                     ({ context }) => emit(context, 'CLARIFICATION_PRESENTED'),
+                    () => armResponse('clarification'),
                   ],
                 },
                 {
@@ -649,6 +669,7 @@ export function createDialogueMachine(deps: DialogueDeps) {
                       }),
                     ),
                     ({ context, event }) => emitStage(context, 'INTERPRETATION_READY', 'interpret', event.output.durationMs),
+                    () => armResponse('confirmation'),
                   ],
                 },
                 {
@@ -762,7 +783,10 @@ export function createDialogueMachine(deps: DialogueDeps) {
                     target: '#translating',
                     actions: [
                       assign(({ context }) => patchTask(context, { confirmedMeaning: needTask(context).proposedMeaning })),
-                      ({ context }) => emit(context, 'CONFIRMATION_YES'),
+                      ({ context }) => {
+                        emit(context, 'CONFIRMATION_YES');
+                        markConfirmationTap();
+                      },
                     ],
                   },
                   CONFIRM_NO: [
@@ -830,6 +854,7 @@ export function createDialogueMachine(deps: DialogueDeps) {
                   actions: [
                     assign(({ context, event }) => patchTask(context, { translatedText: event.output.text })),
                     ({ context, event }) => emitStage(context, 'TRANSLATION_READY', 'translate', event.output.durationMs),
+                    () => armResponse('translation'),
                   ],
                 },
               ],

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { ComparisonResponse, ConditionComparison, ConditionModelSplit, ModelConfig, TestRun } from '@kt/shared';
+import type { ComparisonResponse, ConditionComparison, ConditionModelSplit, LatencyStats, ModelConfig, TestRun } from '@kt/shared';
 import { MonitorApiError, monitorApi } from './api';
 import { useMonitor } from './context';
 import { fmtMs, fmtTime, fmtUsd } from './format';
@@ -24,6 +24,12 @@ function configLine(c: ModelConfig | null): string {
   if (!c) return 'UNKNOWN';
   const voice = c.ttsVoice ? ` · voice ${c.ttsVoice}` : '';
   return `${c.preset}: ASR ${c.asrProvider}/${c.asrModel}; interpret ${c.interpretProvider}/${c.interpretModel}; translate ${c.translateProvider}/${c.translateModel}; TTS ${c.ttsProvider}/${c.ttsModel}${voice}`;
+}
+
+function responseText(d: LatencyStats): string {
+  if (d.count > 0 && d.avgMs === null) return `withheld (n=${d.count}; not combined across configurations)`;
+  if (d.count === 0 || d.avgMs === null) return `— (n=${d.count} valid responses)`;
+  return `avg ${fmtMs(d.avgMs)} · median ${fmtMs(d.medianMs)} · p95 ${fmtMs(d.p95Ms)} · n=${d.count}`;
 }
 
 function distText(d: { count: number; medianMs: number | null; p90Ms: number | null }, p90Min: number): string {
@@ -212,7 +218,7 @@ export function TestSessionsTab() {
 
       <h3>Environment comparison</h3>
       <p className="mon-note">
-        Side-by-side HOME + WIFI and OUTDOOR + CELLULAR. Sample sizes are shown. A blank latency means the value was not computed, not that it was zero. HTTP round-trip time is separate from model processing time.
+        Side-by-side HOME + WIFI and OUTDOOR + CELLULAR. Sample sizes are shown. A blank latency means the value was not computed, not that it was zero. HTTP round-trip time, stage latency, and response latency are separate. Filter by test session, then export response latency for that session.
       </p>
       <p>
         <a className="mon-btn" href={monitorApi.exportUrl('comparison', resolve())}>
@@ -220,6 +226,9 @@ export function TestSessionsTab() {
         </a>
         <a className="mon-btn" href={monitorApi.exportUrl('test-runs', resolve())}>
           Export test sessions CSV
+        </a>
+        <a className="mon-btn" href={monitorApi.exportUrl('response-latency', resolve())}>
+          Export response latency CSV
         </a>
       </p>
       <ErrorNote error={comparison.error} />
@@ -248,6 +257,10 @@ function ConditionCard({ column, report }: { column: ConditionComparison; report
       <p>
         <b>Application-level HTTP RTT</b> (not model latency): {distText(column.httpRtt, report.p90MinSamples)}
       </p>
+      <p>
+        <b>Response latency</b> (input finished or Yes tap → first audible audio, not TTS generation): {responseText(column.responseLatency)}
+      </p>
+      {!column.configsDiffer && <ResponseTypeList rows={column.responseByType} />}
       {column.configsDiffer ? (
         <p className="mon-alert warn">This condition includes {column.splits.length} model configurations. Latency is not combined across them.</p>
       ) : (
@@ -261,6 +274,19 @@ function ConditionCard({ column, report }: { column: ConditionComparison; report
         <SplitBlock key={split.modelConfigId ?? 'unknown'} split={split} report={report} showLatency={column.configsDiffer} />
       ))}
     </section>
+  );
+}
+
+function ResponseTypeList({ rows }: { rows: Array<{ responseType: string } & LatencyStats> }) {
+  if (rows.every((r) => r.count === 0)) return null;
+  return (
+    <ul className="mon-note">
+      {rows.map((r) => (
+        <li key={r.responseType}>
+          {r.responseType} response latency: {responseText(r)}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -297,6 +323,8 @@ function SplitBlock({ split, report, showLatency }: { split: ConditionModelSplit
         <>
           <p>Task completion: {distText(split.taskElapsed, report.p90MinSamples)}</p>
           <StageList stages={split.stages} p90Min={report.p90MinSamples} />
+          <p>Response latency: {responseText(split.responseLatency)}</p>
+          <ResponseTypeList rows={split.responseByType} />
         </>
       )}
       <p>Recorded audio: {fmtMs(split.recordedAudioMs)} · Cloud cost: {costText(split)}</p>

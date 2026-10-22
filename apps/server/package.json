@@ -12,6 +12,7 @@
     "local:start": "tsx scripts/local-start.ts",
     "local:smoke": "tsx scripts/local-smoke.ts",
     "local:eval": "tsx scripts/local-eval.ts",
+    "eval:narratives": "tsx scripts/eval-narratives.ts",
     "local:e2e": "tsx scripts/local-e2e-http.ts"
   },
   "dependencies": {

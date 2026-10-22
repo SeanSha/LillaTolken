@@ -166,6 +166,7 @@ describe('M09: monitor access control', () => {
     '/api/monitor/export?type=annotations&format=csv',
     '/api/monitor/export?type=test-runs&format=csv',
     '/api/monitor/export?type=comparison&format=csv',
+    '/api/monitor/export?type=response-latency&format=csv',
     '/api/monitor/test-runs',
     '/api/monitor/comparison',
     '/api/monitor/model-configs',

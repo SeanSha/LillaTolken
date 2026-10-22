@@ -17,6 +17,7 @@ export const EVAL_EVENT_TYPES = [
   'CONFIRMATION_NO',
   'TRANSLATION_READY',
   'TTS_READY', // extra: needed for TTS latency
+  'PLAYBACK_STARTED', // first audible playback; not TTS generation
   'PLAYBACK_COMPLETED',
   'TASK_COMPLETED',
   'TASK_CANCELLED',
@@ -31,6 +32,14 @@ export type EvalEventType = (typeof EVAL_EVENT_TYPES)[number];
 
 export const EVAL_STAGES = ['asr', 'interpret', 'translate', 'tts'] as const;
 export type EvalStage = (typeof EVAL_STAGES)[number];
+
+/** Which system utterance became audible. Interface prompts are never one of these. */
+export const RESPONSE_TYPES = ['clarification', 'confirmation', 'translation'] as const;
+export type ResponseType = (typeof RESPONSE_TYPES)[number];
+
+/** What the child or adult did that this spoken response is waiting on. */
+export const RESPONSE_TRIGGERS = ['audio_input', 'confirmation_tap'] as const;
+export type ResponseTrigger = (typeof RESPONSE_TRIGGERS)[number];
 
 /** Strict: any unknown key (e.g. an accidental `transcript`) is rejected by the backend. */
 export const EvalEventSchema = z.strictObject({
@@ -57,6 +66,14 @@ export const EvalEventSchema = z.strictObject({
   playbackMs: z.number().min(0).optional(),
   /** Pairing code for the researcher-issued test session. Not inferred. */
   testCode: z.string().regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/).optional(),
+  /**
+   * PLAYBACK_STARTED only. Monotonic client interval from the paired trigger to the browser
+   * `playing` event. Omitted when the trigger or the audible start is missing — never zero-filled.
+   */
+  responseType: z.enum(RESPONSE_TYPES).optional(),
+  responseTrigger: z.enum(RESPONSE_TRIGGERS).optional(),
+  responseLatencyMs: z.number().min(0).optional(),
+  responseId: z.string().max(100).optional(),
 });
 
 export type EvalEvent = z.infer<typeof EvalEventSchema>;
@@ -83,4 +100,8 @@ export const EVAL_CSV_COLUMNS = [
   'segmentIndex',
   'playbackMs',
   'testCode',
+  'responseType',
+  'responseTrigger',
+  'responseLatencyMs',
+  'responseId',
 ] as const satisfies readonly (keyof EvalEvent)[];

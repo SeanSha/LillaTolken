@@ -95,5 +95,6 @@ export const monitorApi = {
   endTestRun: (testRunId: string) => call<{ run: TestRun }>(`/api/monitor/test-runs/${encodeURIComponent(testRunId)}/end`, { method: 'POST' }),
   modelConfigs: () => call<{ configs: ModelConfig[] }>('/api/monitor/model-configs'),
   comparison: (f: MonitorFilters) => call<ComparisonResponse>(`/api/monitor/comparison${toQuery(f)}`),
-  exportUrl: (type: 'requests' | 'tasks' | 'annotations' | 'test-runs' | 'comparison', f: MonitorFilters) => `/api/monitor/export${toQuery(f, { type, format: 'csv' })}`,
+  exportUrl: (type: 'requests' | 'tasks' | 'annotations' | 'test-runs' | 'comparison' | 'response-latency', f: MonitorFilters) =>
+    `/api/monitor/export${toQuery(f, { type, format: 'csv' })}`,
 };

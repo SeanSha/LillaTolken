@@ -24,6 +24,9 @@ import type {
   PresetSummary,
   ProviderPreset,
   RequestStatus,
+  ResponseLatencyExportRow,
+  ResponseLatencyReport,
+  ResponseType,
   SegmentRow,
   StageDistribution,
   StageSummary,
@@ -34,7 +37,7 @@ import type {
   VocabularyUsageReport,
   YesNoNA,
 } from '@kt/shared';
-import { AI_STAGES, P90_MIN_SAMPLES, PROVIDER_PRESETS, REQUEST_STATUSES } from '@kt/shared';
+import { AI_STAGES, P90_MIN_SAMPLES, PROVIDER_PRESETS, REQUEST_STATUSES, RESPONSE_TYPES } from '@kt/shared';
 import type { SQLInputValue } from 'node:sqlite';
 import { asEnvironment, asNetwork, asNoise, type TelemetryDb } from './db';
 
@@ -62,6 +65,157 @@ export function latencyStats(values: readonly number[]): LatencyStats {
   const sorted = [...values].sort((a, b) => a - b);
   const sum = sorted.reduce((a, b) => a + b, 0);
   return { count: sorted.length, avgMs: sum / sorted.length, medianMs: percentile(sorted, 50), p95Ms: percentile(sorted, 95) };
+}
+
+const EMPTY_LATENCY: LatencyStats = { count: 0, avgMs: null, medianMs: null, p95Ms: null };
+
+export const RESPONSE_LATENCY_NOTE =
+  'Response latency is the wait from the paired trigger (speech submitted, or the confirmation Yes tap) until the browser playing event. It is not ASR latency, LLM latency, TTS generation time, task duration, audio playback duration, or HTTP round-trip time. Cloud and Local are never averaged together. Clarification, confirmation and final translation are the same kind of wait and can be summarized together, and are also listed separately. A missing trigger or a playback that never started is omitted, not stored as zero. Tasks recorded before PLAYBACK_STARTED have no value.';
+
+const RESPONSE_BUCKETS: Array<{ label: string; max: number }> = [
+  { label: '0–1 s', max: 1000 },
+  { label: '1–2 s', max: 2000 },
+  { label: '2–3 s', max: 3000 },
+  { label: '3–4 s', max: 4000 },
+  { label: '4–6 s', max: 6000 },
+  { label: '6–8 s', max: 8000 },
+  { label: '8 s+', max: Number.POSITIVE_INFINITY },
+];
+
+type PlaySample = {
+  preset: string;
+  responseType: string | null;
+  latencyMs: number | null;
+  modelConfigId: string | null;
+  taskId: string;
+  startedAt: string;
+};
+
+function playbackSamples(db: TelemetryDb, f: MonitorFilters): PlaySample[] {
+  const w = taskWhere(f);
+  const where = w.sql ? `${w.sql} AND e.event_type = 'PLAYBACK_STARTED'` : `WHERE e.event_type = 'PLAYBACK_STARTED'`;
+  return db
+    .all<Row>(
+      `SELECT t.preset AS preset, e.response_type AS response_type, e.response_latency_ms AS response_latency_ms,
+              t.model_config_id AS model_config_id, e.task_id AS task_id, t.started_at AS started_at
+       FROM events e JOIN tasks t ON t.task_id = e.task_id ${where}`,
+      ...w.params,
+    )
+    .map((r) => ({
+      preset: String(r.preset),
+      responseType: str(r.response_type),
+      latencyMs: num(r.response_latency_ms),
+      modelConfigId: str(r.model_config_id),
+      taskId: String(r.task_id),
+      startedAt: String(r.started_at),
+    }));
+}
+
+function realPreset(preset: string, f: MonitorFilters): boolean {
+  if (preset === 'mock') return f.preset === 'mock';
+  return preset === 'cloud' || preset === 'local';
+}
+
+function valuesOf(samples: readonly PlaySample[], f: MonitorFilters, preset?: string, responseType?: ResponseType): number[] {
+  const out: number[] = [];
+  for (const s of samples) {
+    if (!realPreset(s.preset, f)) continue;
+    if (preset && s.preset !== preset) continue;
+    if (responseType && s.responseType !== responseType) continue;
+    if (s.latencyMs === null || !Number.isFinite(s.latencyMs)) continue;
+    out.push(s.latencyMs);
+  }
+  return out;
+}
+
+function latencyOf(samples: readonly PlaySample[], f: MonitorFilters, preset?: string, responseType?: ResponseType): LatencyStats {
+  return latencyStats(valuesOf(samples, f, preset, responseType));
+}
+
+function withholdLatency(d: LatencyStats): LatencyStats {
+  return { count: d.count, avgMs: null, medianMs: null, p95Ms: null };
+}
+
+function byTypeOf(samples: readonly PlaySample[], f: MonitorFilters, preset?: string): Array<{ responseType: ResponseType } & LatencyStats> {
+  return RESPONSE_TYPES.map((responseType) => ({ responseType, ...latencyOf(samples, f, preset, responseType) }));
+}
+
+function bucketsOf(samples: readonly PlaySample[], f: MonitorFilters): ResponseLatencyReport['buckets'] {
+  const cloud = valuesOf(samples, f, 'cloud');
+  const local = valuesOf(samples, f, 'local');
+  const countIn = (values: readonly number[], min: number, max: number) => values.filter((v) => v >= min && v < max).length;
+  return RESPONSE_BUCKETS.map((b, i) => {
+    const min = i === 0 ? 0 : RESPONSE_BUCKETS[i - 1]!.max;
+    return { label: b.label, cloud: countIn(cloud, min, b.max), local: countIn(local, min, b.max) };
+  });
+}
+
+function headlineOf(samples: readonly PlaySample[], f: MonitorFilters): LatencyStats | null {
+  if (f.preset === 'cloud' || f.preset === 'local' || f.preset === 'mock') return latencyOf(samples, f, f.preset);
+  const cloud = latencyOf(samples, f, 'cloud');
+  const local = latencyOf(samples, f, 'local');
+  if (cloud.count > 0 && local.count > 0) return null;
+  if (cloud.count > 0) return cloud;
+  if (local.count > 0) return local;
+  return EMPTY_LATENCY;
+}
+
+function omittedAudioTasks(db: TelemetryDb, f: MonitorFilters): number {
+  const w = taskWhere(f);
+  const extra = `t.status = 'delivered' AND t.delivery_mode = 'audio' AND NOT EXISTS (
+    SELECT 1 FROM events e WHERE e.task_id = t.task_id AND e.event_type = 'PLAYBACK_STARTED' AND e.response_latency_ms IS NOT NULL
+  )`;
+  const sql = w.sql ? `${w.sql} AND ${extra}` : `WHERE ${extra}`;
+  return db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM tasks t ${sql}`, ...w.params)?.n ?? 0;
+}
+
+function responseReport(db: TelemetryDb, f: MonitorFilters, samples: readonly PlaySample[]): ResponseLatencyReport {
+  const unavailable = samples.filter((s) => realPreset(s.preset, f) && (s.latencyMs === null || !Number.isFinite(s.latencyMs))).length;
+  return {
+    headline: headlineOf(samples, f),
+    cloud: f.preset === 'local' || f.preset === 'mock' ? EMPTY_LATENCY : latencyOf(samples, f, 'cloud'),
+    local: f.preset === 'cloud' || f.preset === 'mock' ? EMPTY_LATENCY : latencyOf(samples, f, 'local'),
+    byType: RESPONSE_TYPES.map((responseType) => ({
+      responseType,
+      cloud: f.preset === 'local' || f.preset === 'mock' ? EMPTY_LATENCY : latencyOf(samples, f, 'cloud', responseType),
+      local: f.preset === 'cloud' || f.preset === 'mock' ? EMPTY_LATENCY : latencyOf(samples, f, 'local', responseType),
+    })),
+    buckets: bucketsOf(samples, f),
+    unavailable,
+    omittedTasks: omittedAudioTasks(db, f),
+    note: RESPONSE_LATENCY_NOTE,
+  };
+}
+
+export function listResponseLatencies(db: TelemetryDb, f: MonitorFilters): ResponseLatencyExportRow[] {
+  const w = taskWhere(f);
+  const where = w.sql ? `${w.sql} AND e.event_type = 'PLAYBACK_STARTED'` : `WHERE e.event_type = 'PLAYBACK_STARTED'`;
+  return db
+    .all<Row>(
+      `SELECT e.ts AS ts, e.task_id AS task_id, e.session_id AS session_id, t.test_run_id AS test_run_id,
+              t.preset AS preset, t.direction AS direction, t.environment AS environment, t.network_type AS network_type,
+              t.noise_level AS noise_level, t.model_config_id AS model_config_id, e.response_type AS response_type,
+              e.response_trigger AS response_trigger, e.response_latency_ms AS response_latency_ms, e.response_id AS response_id
+       FROM events e JOIN tasks t ON t.task_id = e.task_id ${where}
+       ORDER BY e.ts ASC, e.id ASC`,
+      ...w.params,
+    )
+    .map((r) => ({
+      ts: String(r.ts),
+      taskId: String(r.task_id),
+      sessionId: String(r.session_id),
+      testRunId: str(r.test_run_id),
+      preset: r.preset as ProviderPreset,
+      direction: str(r.direction) as Direction | null,
+      environment: asEnvironment(r.environment),
+      networkType: asNetwork(r.network_type),
+      noiseLevel: asNoise(r.noise_level),
+      modelConfigId: str(r.model_config_id),
+      responseType: RESPONSE_TYPES.includes(r.response_type as ResponseType) ? (r.response_type as ResponseType) : null,
+      responseTrigger: r.response_trigger === 'audio_input' || r.response_trigger === 'confirmation_tap' ? r.response_trigger : null,
+      responseLatencyMs: num(r.response_latency_ms),
+      responseId: str(r.response_id),
+    }));
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
@@ -294,7 +448,12 @@ export function getTaskDetail(db: TelemetryDb, taskId: string) {
       hitTimeout: s.hit_timeout === 1,
     }));
   const events: EventRow[] = db
-    .all<Row>('SELECT id, ts, event_type, stage, stage_duration_ms, elapsed_ms, error_category FROM events WHERE task_id = ? ORDER BY id ASC', taskId)
+    .all<Row>(
+      `SELECT id, ts, event_type, stage, stage_duration_ms, elapsed_ms, error_category,
+              response_type, response_trigger, response_latency_ms
+       FROM events WHERE task_id = ? ORDER BY id ASC`,
+      taskId,
+    )
     .map((e) => ({
       id: e.id as number,
       ts: e.ts as string,
@@ -303,6 +462,9 @@ export function getTaskDetail(db: TelemetryDb, taskId: string) {
       stageDurationMs: num(e.stage_duration_ms),
       elapsedMs: num(e.elapsed_ms),
       errorCategory: str(e.error_category),
+      responseType: RESPONSE_TYPES.includes(e.response_type as ResponseType) ? (e.response_type as ResponseType) : null,
+      responseTrigger: e.response_trigger === 'audio_input' || e.response_trigger === 'confirmation_tap' ? e.response_trigger : null,
+      responseLatencyMs: num(e.response_latency_ms),
     }));
   return { task: mapTask(row), requests, segments, events };
 }
@@ -447,6 +609,7 @@ export function summary(db: TelemetryDb, f: MonitorFilters, now: Date = new Date
         .filter((v): v is number => v !== null),
     ),
     requestLatency: latencyStats(reqs.filter((r) => r.status === 'succeeded' && realLatency(r)).map((r) => r.duration_ms as number)),
+    responseLatency: responseReport(db, f, playbackSamples(db, f)),
     stages,
     presets,
     models: [...modelMap.values()].sort((a, b) => b.requests - a.requests),
@@ -479,7 +642,24 @@ export function timeseries(db: TelemetryDb, f: MonitorFilters, bucket: 'hour' | 
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(r);
   }
-  return [...map.entries()].map(([bucketKey, rs]) => {
+  const tw = taskWhere(f);
+  const heardWhere = tw.sql
+    ? `${tw.sql} AND e.event_type = 'PLAYBACK_STARTED' AND e.response_latency_ms IS NOT NULL AND t.preset IN ('cloud', 'local')`
+    : `WHERE e.event_type = 'PLAYBACK_STARTED' AND e.response_latency_ms IS NOT NULL AND t.preset IN ('cloud', 'local')`;
+  const responseByBucket = new Map<string, Array<{ preset: string; ms: number }>>();
+  for (const row of db.all<Row>(
+    `SELECT strftime('${fmt}', t.started_at) AS bucket, t.preset AS preset, e.response_latency_ms AS ms
+     FROM events e JOIN tasks t ON t.task_id = e.task_id ${heardWhere}`,
+    ...tw.params,
+  )) {
+    const key = str(row.bucket);
+    const ms = num(row.ms);
+    if (!key || ms === null) continue;
+    if (!responseByBucket.has(key)) responseByBucket.set(key, []);
+    responseByBucket.get(key)!.push({ preset: String(row.preset), ms });
+  }
+  for (const key of responseByBucket.keys()) if (!map.has(key)) map.set(key, []);
+  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([bucketKey, rs]) => {
     const avgMs: TimeseriesPoint['avgMs'] = {};
     for (const stage of AI_STAGES) {
       const v = rs.filter((r) => r.stage === stage && r.status === 'succeeded' && (r.preset !== 'mock' || f.preset === 'mock')).map((r) => r.duration_ms as number);
@@ -493,6 +673,11 @@ export function timeseries(db: TelemetryDb, f: MonitorFilters, bucket: 'hour' | 
       byPreset[preset] = { requests: p.length, avgMs: ok.length ? ok.reduce((a, r) => a + (r.duration_ms as number), 0) / ok.length : null };
     }
     const cloud = rs.filter((r) => r.preset === 'cloud');
+    const heard = responseByBucket.get(bucketKey) ?? [];
+    const avgOf = (preset: 'cloud' | 'local') => {
+      const v = heard.filter((s) => s.preset === preset).map((s) => s.ms);
+      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+    };
     return {
       bucket: bucketKey,
       requests: rs.length,
@@ -500,6 +685,7 @@ export function timeseries(db: TelemetryDb, f: MonitorFilters, bucket: 'hour' | 
       cloudUnknown: cloud.filter((r) => num(r.cost_usd) === null).length,
       avgMs,
       byPreset,
+      responseLatencyAvgMs: { cloud: avgOf('cloud'), local: avgOf('local') },
     };
   });
 }
@@ -714,7 +900,7 @@ export function vocabularyUsage(db: TelemetryDb, f: MonitorFilters): VocabularyU
 const COMPARE_STAGES: AiStage[] = ['ASR', 'INTERPRET', 'TRANSLATE', 'TTS'];
 
 const COMPARE_NOTE =
-  'HOME + WIFI is compared with OUTDOOR + CELLULAR. Date, provider, direction, stage, model, status, noise, test session and model-configuration filters apply. The environment and network filters do not hide either column. HTTP RTT is the application-level round trip measured by the phone; it is not ASR, LLM or TTS processing time, signal strength, or pure network latency. P90 is omitted when a sample has fewer than 5 values. If a column mixes model configurations, headline latency is withheld and each configuration is listed on its own. Records without environment metadata stay UNKNOWN and are not placed in either column.';
+  'HOME + WIFI is compared with OUTDOOR + CELLULAR. Date, provider, direction, stage, model, status, noise, test session and model-configuration filters apply. The environment and network filters do not hide either column. HTTP RTT is the application-level round trip measured by the phone; it is not ASR, LLM or TTS processing time, signal strength, or pure network latency. Response latency is the wait from the paired input until the browser playing event. It is not ASR, LLM, TTS generation, task duration, playback duration, or HTTP RTT. P90 is omitted when a sample has fewer than 5 values. Response latency uses average, median and P95, and a blank value is unavailable rather than zero. If a column mixes model configurations or Cloud with Local, headline latency is withheld and each configuration is listed on its own. Records without environment metadata stay UNKNOWN and are not placed in either column.';
 
 type TaskAgg = {
   model_config_id: string | null;
@@ -772,7 +958,26 @@ function withhold(d: DistributionMs): DistributionMs {
   return { count: d.count, medianMs: null, p90Ms: null };
 }
 
-function splitFor(configId: string | null, tasks: readonly TaskAgg[], reqs: readonly ReqAgg[], config: ModelConfig | null, f: MonitorFilters): ConditionModelSplit {
+function responseFor(samples: readonly PlaySample[], f: MonitorFilters): Pick<ConditionModelSplit, 'responseLatency' | 'responseByType'> {
+  const presets = new Set(samples.filter((s) => s.latencyMs !== null && realPreset(s.preset, f)).map((s) => s.preset));
+  const mixed = presets.size > 1;
+  const responseLatency = latencyOf(samples, f);
+  const responseByType = byTypeOf(samples, f);
+  if (!mixed) return { responseLatency, responseByType };
+  return {
+    responseLatency: withholdLatency(responseLatency),
+    responseByType: responseByType.map((row) => ({ ...row, ...withholdLatency(row) })),
+  };
+}
+
+function splitFor(
+  configId: string | null,
+  tasks: readonly TaskAgg[],
+  reqs: readonly ReqAgg[],
+  config: ModelConfig | null,
+  f: MonitorFilters,
+  samples: readonly PlaySample[],
+): ConditionModelSplit {
   const voices = [...new Set(reqs.map((r) => r.voice).filter((v): v is string => Boolean(v)))].sort();
   const models = new Map<string, { stage: AiStage; modelTag: string; requests: number }>();
   for (const r of reqs) {
@@ -791,6 +996,7 @@ function splitFor(configId: string | null, tasks: readonly TaskAgg[], reqs: read
     tasksFailed: tasks.filter((t) => t.status === 'failed').length,
     taskElapsed: elapsedOf(tasks, f),
     stages: stagesOf(reqs, f),
+    ...responseFor(samples, f),
     recordedAudioMs: tasks.reduce((sum, t) => sum + t.recorded_ms, 0),
     ...costOf(reqs),
     requestModels: [...models.values()],
@@ -876,6 +1082,7 @@ function condition(
       voice: str(r.voice),
     }));
 
+  const heard = playbackSamples(db, filters);
   const ids = [...new Set(tasks.map((t) => t.model_config_id))];
   const splits = ids.map((id) =>
     splitFor(
@@ -884,11 +1091,13 @@ function condition(
       reqs.filter((r) => r.model_config_id === id),
       id ? db.getModelConfig(id) : null,
       filters,
+      heard.filter((s) => s.modelConfigId === id),
     ),
   );
   const configsDiffer = ids.length > 1;
   const elapsed = elapsedOf(tasks, filters);
   const stages = stagesOf(reqs, filters);
+  const heardSummary = responseFor(heard, filters);
   return {
     key,
     label,
@@ -903,6 +1112,8 @@ function condition(
     configsDiffer,
     taskElapsed: configsDiffer ? withhold(elapsed) : elapsed,
     stages: configsDiffer ? stages.map((s) => ({ ...s, ...withhold(s) })) : stages,
+    responseLatency: configsDiffer ? withholdLatency(heardSummary.responseLatency) : heardSummary.responseLatency,
+    responseByType: configsDiffer ? heardSummary.responseByType.map((row) => ({ ...row, ...withholdLatency(row) })) : heardSummary.responseByType,
     httpRtt: distribution(rttValues(db, base, environment, network)),
     recordedAudioMs: tasks.reduce((sum, t) => sum + t.recorded_ms, 0),
     ...costOf(reqs),

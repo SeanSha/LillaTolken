@@ -40,7 +40,8 @@ function pickVoice(tag: string): SpeechSynthesisVoice | undefined {
 
 /**
  * Static prompts are pre-generated, natural-sounding audio files (no network call to an API, no
- * cost at runtime). One reused <audio> element keeps iOS Safari's autoplay unlock. If a file
+ * cost at runtime). They are interface prompts, not translator responses, so they are not
+ * response-latency samples. One reused <audio> element keeps iOS Safari's autoplay unlock. If a file
  * cannot be played, falls back to the browser's built-in speech synthesis. Always resolves.
  */
 export class SpeechPrompts {

@@ -262,7 +262,7 @@ function DataControls() {
     <section>
       <h3>Export &amp; data</h3>
       <p>
-        {(['requests', 'tasks', 'annotations', 'test-runs', 'comparison'] as const).map((t) => (
+        {(['requests', 'tasks', 'annotations', 'test-runs', 'comparison', 'response-latency'] as const).map((t) => (
           <a key={t} className="mon-btn" href={monitorApi.exportUrl(t, resolve())} download>
             Export {t} CSV
           </a>

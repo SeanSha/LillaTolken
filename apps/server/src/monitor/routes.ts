@@ -13,7 +13,7 @@ import type { ServerConfig } from '../config';
 import type { EventStore } from '../evaluation/eventStore';
 import type { ProviderRegistry } from '../providers/registry';
 import type { TelemetryDb } from '../telemetry/db';
-import { annotationsCsv, comparisonCsv, requestsCsv, tasksCsv, testRunsCsv } from '../telemetry/export';
+import { annotationsCsv, comparisonCsv, requestsCsv, responseLatencyCsv, tasksCsv, testRunsCsv } from '../telemetry/export';
 import type { PriceRegistry } from '../telemetry/pricing';
 import * as q from '../telemetry/queries';
 import type { MonitorAuth } from './auth';
@@ -341,7 +341,7 @@ export function createMonitorRouter(deps: MonitorDeps): Router {
   });
 
   router.get('/api/monitor/export', (req, res) => {
-    const type = z.enum(['requests', 'tasks', 'annotations', 'test-runs', 'comparison']).safeParse(req.query.type);
+    const type = z.enum(['requests', 'tasks', 'annotations', 'test-runs', 'comparison', 'response-latency']).safeParse(req.query.type);
     const format = z.literal('csv').safeParse(req.query.format ?? 'csv');
     if (!type.success || !format.success) {
       res.status(400).json({ error: { code: 'BAD_REQUEST' } });
@@ -358,7 +358,9 @@ export function createMonitorRouter(deps: MonitorDeps): Router {
             ? annotationsCsv(q.listAnnotations(db, filters, all).rows)
             : type.data === 'test-runs'
               ? testRunsCsv(db.listTestRuns())
-              : comparisonCsv(q.environmentComparison(db, filters));
+              : type.data === 'response-latency'
+                ? responseLatencyCsv(q.listResponseLatencies(db, filters))
+                : comparisonCsv(q.environmentComparison(db, filters));
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="kidstranslator-${type.data}.csv"`);
     res.send(csv);

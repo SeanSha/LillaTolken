@@ -12,7 +12,7 @@ import type { ModelConfigSnapshot } from './modelConfig';
 import { stableModelConfigId } from './modelConfig';
 
 /** Bump with a new entry in MIGRATIONS. Migrations are additive and never drop user data. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -193,6 +193,12 @@ const MIGRATIONS: Record<number, string> = {
     CREATE INDEX idx_req_test_run ON ai_requests(test_run_id);
     CREATE INDEX idx_rtt_run ON http_rtt(test_run_id, measured_at);
     CREATE INDEX idx_runs_status ON test_runs(status, started_at);
+  `,
+  4: `
+    ALTER TABLE events ADD COLUMN response_type TEXT;
+    ALTER TABLE events ADD COLUMN response_trigger TEXT;
+    ALTER TABLE events ADD COLUMN response_latency_ms REAL;
+    ALTER TABLE events ADD COLUMN response_id TEXT;
   `,
 };
 
@@ -462,8 +468,8 @@ export class TelemetryDb {
     this.run(
       `INSERT INTO events(ts, session_id, task_id, preset, event_type, direction, scenario_id, model_tag, stage,
          stage_duration_ms, elapsed_ms, segment_duration_ms, clarification_count, error_category, delivery_mode,
-         playback_ms, version)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         playback_ms, version, response_type, response_trigger, response_latency_ms, response_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       e.ts,
       e.sessionId,
       nul(e.taskId),
@@ -481,6 +487,10 @@ export class TelemetryDb {
       nul(e.deliveryMode),
       nul(e.playbackMs),
       e.version,
+      nul(e.responseType),
+      nul(e.responseTrigger),
+      nul(e.responseLatencyMs),
+      nul(e.responseId),
     );
 
     if (e.eventType === 'SESSION_ENDED') {

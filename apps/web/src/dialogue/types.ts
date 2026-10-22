@@ -1,3 +1,4 @@
+import type { ResponseLatencyTracker } from './responseLatency';
 import type {
   AudioData,
   DeliveryMode,
@@ -11,6 +12,8 @@ import type {
   Language,
   ProviderBundle,
   ProviderPreset,
+  ResponseTrigger,
+  ResponseType,
 } from '@kt/shared';
 
 export type { DialogueInput, LastDelivered, InputPurpose, Direction, ProviderPreset };
@@ -145,6 +148,10 @@ export type LogFields = {
   inputPurpose?: InputPurpose;
   segmentIndex?: number;
   playbackMs?: number;
+  responseType?: ResponseType;
+  responseTrigger?: ResponseTrigger;
+  responseLatencyMs?: number;
+  responseId?: string;
 };
 
 export type DialogueDeps = {
@@ -163,6 +170,10 @@ export type DialogueDeps = {
   log: (fields: LogFields) => void;
   /** Duration of the most recent completed result playback on this device (monitoring only). */
   lastPlaybackMs?: () => number | undefined;
+  /** Pairs spoken responses with the input that triggered them. Optional so older tests stay valid. */
+  responses?: ResponseLatencyTracker;
+  /** Monotonic clock shared with audible-start measurement. Not wall time. */
+  monoNow?: () => number;
   newId: () => string;
   now: () => number;
   /** Called when a new task starts (e.g. to reset the mock script). */

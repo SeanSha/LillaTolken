@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LIMITS } from '@kt/shared';
-import { audioStore, player } from '../services/runtime';
+import { audioStore, player, reportAudibleStart } from '../services/runtime';
 import type { PlaybackSlot } from '../dialogue/types';
 
 /** Seconds left in the current 30 s segment, derived from the machine's segmentStartedAt. */
@@ -44,7 +44,8 @@ export function usePlayback(slot: PlaybackSlot, ready: boolean, autoPlay: boolea
     setPlaying(true);
     setBlocked(false);
     setFailed(false);
-    player.play(audio).then(
+    // onAudible is the browser `playing` event. Replays of the same response are ignored by the tracker.
+    player.play(audio, { onAudible: reportAudibleStart }).then(
       (result) => {
         setPlaying(false);
         if (result === 'ended') onEndedRef.current?.();

@@ -191,7 +191,11 @@ function TaskDetailView({ taskId }: { taskId: string }) {
           <li key={e.id}>
             <span>{new Date(e.ts).toLocaleTimeString()}</span> {e.eventType}
             {e.stage ? ` · ${e.stage}` : ''}
-            {e.stageDurationMs !== null ? ` · ${fmtMs(e.stageDurationMs)}` : ''}
+            {e.stageDurationMs !== null ? ` · stage ${fmtMs(e.stageDurationMs)}` : ''}
+            {e.responseType ? ` · ${e.responseType}` : ''}
+            {e.responseTrigger ? ` · ${e.responseTrigger === 'confirmation_tap' ? 'confirmation tap' : 'audio input'}` : ''}
+            {e.responseLatencyMs !== null ? ` · response ${fmtMs(e.responseLatencyMs)}` : ''}
+            {e.eventType === 'PLAYBACK_STARTED' && e.responseLatencyMs === null ? ' · response latency unavailable' : ''}
             {e.errorCategory ? ` · ${e.errorCategory}` : ''}
           </li>
         ))}

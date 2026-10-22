@@ -1,6 +1,6 @@
 // Optional CSV backup of monitoring metadata. Same columns as the dashboard: no content, ever.
 // Categorical gaps are the literal UNKNOWN. Missing ids and numbers are blank. Never a guessed HOME or WIFI.
-import type { AiRequestRow, AnnotationRow, ComparisonResponse, TaskRow, TestRun } from '@kt/shared';
+import type { AiRequestRow, AnnotationRow, ComparisonResponse, ResponseLatencyExportRow, TaskRow, TestRun } from '@kt/shared';
 import { csvCell } from '../evaluation/eventStore';
 
 const cat = (value: string | null | undefined) => (value && value.length > 0 ? value : 'UNKNOWN');
@@ -155,6 +155,19 @@ export const comparisonCsv = (report: ComparisonResponse) => {
       translateP90Ms: stageMs(split?.stages ?? col.stages, 'TRANSLATE', 'p90Ms'),
       ttsMedianMs: stageMs(split?.stages ?? col.stages, 'TTS', 'medianMs'),
       ttsP90Ms: stageMs(split?.stages ?? col.stages, 'TTS', 'p90Ms'),
+      responseLatencyCount: (split?.responseLatency ?? col.responseLatency).count,
+      responseLatencyAvgMs: (split?.responseLatency ?? col.responseLatency).avgMs,
+      responseLatencyMedianMs: (split?.responseLatency ?? col.responseLatency).medianMs,
+      responseLatencyP95Ms: (split?.responseLatency ?? col.responseLatency).p95Ms,
+      clarificationLatencyCount: typeCount(split?.responseByType ?? col.responseByType, 'clarification', 'count'),
+      clarificationLatencyMedianMs: typeCount(split?.responseByType ?? col.responseByType, 'clarification', 'medianMs'),
+      clarificationLatencyP95Ms: typeCount(split?.responseByType ?? col.responseByType, 'clarification', 'p95Ms'),
+      confirmationLatencyCount: typeCount(split?.responseByType ?? col.responseByType, 'confirmation', 'count'),
+      confirmationLatencyMedianMs: typeCount(split?.responseByType ?? col.responseByType, 'confirmation', 'medianMs'),
+      confirmationLatencyP95Ms: typeCount(split?.responseByType ?? col.responseByType, 'confirmation', 'p95Ms'),
+      translationLatencyCount: typeCount(split?.responseByType ?? col.responseByType, 'translation', 'count'),
+      translationLatencyMedianMs: typeCount(split?.responseByType ?? col.responseByType, 'translation', 'medianMs'),
+      translationLatencyP95Ms: typeCount(split?.responseByType ?? col.responseByType, 'translation', 'p95Ms'),
     }));
   });
   return toCsv(rows, [
@@ -187,6 +200,19 @@ export const comparisonCsv = (report: ComparisonResponse) => {
     ['translateP90Ms', (r) => r.translateP90Ms],
     ['ttsMedianMs', (r) => r.ttsMedianMs],
     ['ttsP90Ms', (r) => r.ttsP90Ms],
+    ['responseLatencyCount', (r) => r.responseLatencyCount],
+    ['responseLatencyAvgMs', (r) => r.responseLatencyAvgMs],
+    ['responseLatencyMedianMs', (r) => r.responseLatencyMedianMs],
+    ['responseLatencyP95Ms', (r) => r.responseLatencyP95Ms],
+    ['clarificationLatencyCount', (r) => r.clarificationLatencyCount],
+    ['clarificationLatencyMedianMs', (r) => r.clarificationLatencyMedianMs],
+    ['clarificationLatencyP95Ms', (r) => r.clarificationLatencyP95Ms],
+    ['confirmationLatencyCount', (r) => r.confirmationLatencyCount],
+    ['confirmationLatencyMedianMs', (r) => r.confirmationLatencyMedianMs],
+    ['confirmationLatencyP95Ms', (r) => r.confirmationLatencyP95Ms],
+    ['translationLatencyCount', (r) => r.translationLatencyCount],
+    ['translationLatencyMedianMs', (r) => r.translationLatencyMedianMs],
+    ['translationLatencyP95Ms', (r) => r.translationLatencyP95Ms],
     ['httpRttCount', (r) => r.httpRttCount],
     ['httpRttMedianMs', (r) => r.httpRttMedianMs],
     ['httpRttP90Ms', (r) => r.httpRttP90Ms],
@@ -202,3 +228,30 @@ export const comparisonCsv = (report: ComparisonResponse) => {
 function stageMs(stages: ReadonlyArray<{ stage: string; medianMs: number | null; p90Ms: number | null }>, stage: string, field: 'medianMs' | 'p90Ms'): number | null {
   return stages.find((s) => s.stage === stage)?.[field] ?? null;
 }
+
+function typeCount(
+  rows: ReadonlyArray<{ responseType: string; count: number; medianMs: number | null; p95Ms: number | null }>,
+  responseType: string,
+  field: 'count' | 'medianMs' | 'p95Ms',
+): number | null {
+  return rows.find((r) => r.responseType === responseType)?.[field] ?? null;
+}
+
+/** One row per PLAYBACK_STARTED. Blank responseLatencyMs is unavailable, not zero. */
+export const responseLatencyCsv = (rows: readonly ResponseLatencyExportRow[]) =>
+  toCsv(rows, [
+    ['ts', (r) => r.ts],
+    ['taskId', (r) => r.taskId],
+    ['sessionId', (r) => r.sessionId],
+    ['testRunId', (r) => id(r.testRunId)],
+    ['preset', (r) => r.preset],
+    ['direction', (r) => r.direction],
+    ['environment', (r) => cat(r.environment)],
+    ['networkType', (r) => cat(r.networkType)],
+    ['noiseLevel', (r) => cat(r.noiseLevel)],
+    ['modelConfigId', (r) => id(r.modelConfigId)],
+    ['responseType', (r) => r.responseType],
+    ['responseTrigger', (r) => r.responseTrigger],
+    ['responseLatencyMs', (r) => r.responseLatencyMs],
+    ['responseId', (r) => r.responseId],
+  ]);
