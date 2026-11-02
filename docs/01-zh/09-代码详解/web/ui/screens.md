@@ -8,20 +8,37 @@
 
 ## `HomeScreen`
 
-两个大按钮：
+两个大按钮分别开两个方向。点下去之前先解锁播放，不然 iPhone 上后面的声音可能出不来。拍照和我的词卡调用 `onPhotoCards` / `onMyCards`，由 `App.tsx` 去改 `feature`，不发给状态机。
 
-- 说中文：`send({ type: 'START_TASK', direction: 'ZH_TO_SV' })`
-- 说瑞典语：方向换成 `SV_TO_ZH`
+例子：点「中文 → Svenska」，发出的方向是 `ZH_TO_SV`。
 
-下面还有拍照和我的词卡。它们调用 `onPhotoCards` / `onMyCards`，由 `App.tsx` 去改 `feature`，不发给状态机。
+```tsx
+const start = (direction) => {
+  player.unlock();
+  send({ type: 'START_TASK', direction });
+};
+
+<BigButton onClick={() => start('ZH_TO_SV')} />
+<BigButton onClick={() => start('SV_TO_ZH')} />
+```
 
 ## `RecordingScreen`
 
 大停止按钮发送 `STOP_SEGMENT`。倒计时到 0 时由钩子发出 `SEGMENT_TIMEOUT`。短句还在播放时可以 `SKIP_PROMPT`。
 
+```tsx
+onClick={() => send({ type: 'STOP_SEGMENT' })}
+onClick={() => send({ type: 'SKIP_PROMPT' })}
+```
+
 ## `SegmentDecisionScreen`
 
-「继续」发送 `CONTINUE_SPEAKING`。「说完」发送 `FINISH_INPUT`。
+「继续」再录一段。「说完」把已经录下的各段送去识别。
+
+```tsx
+onClick={() => send({ type: 'CONTINUE_SPEAKING' })}
+onClick={() => send({ type: 'FINISH_INPUT' })}
+```
 
 ## `BusyScreen`
 
@@ -29,20 +46,40 @@
 
 ## `QuestionScreen`
 
-`kind="clarify"` 时，大麦克风发送 `START_ANSWER`。
+`kind` 决定这一屏的按钮。确认「我想去厕所」点是，才会翻译。
 
-`kind="confirm"` 时，是发送 `CONFIRM_YES`，否发送 `CONFIRM_NO`。两套按钮长得接近，事件不同。确认「我想去厕所」点是，才会翻译。
+```tsx
+if (kind === 'clarify') {
+  onClick={() => send({ type: 'START_ANSWER' })}
+}
+if (kind === 'confirm') {
+  onClick={() => send({ type: 'CONFIRM_YES' })}
+  onClick={() => send({ type: 'CONFIRM_NO' })}
+}
+```
 
 ## `ResultScreen`
 
-播放按钮重播已经得到的音频。新一轮发送 `NEW_TURN`。再录一次会再发 `START_TASK`。
+声音放完，发出送达。播放失败时，大人可以接受只看文字。再来一轮或回首页是另外两个事件。
+
+```tsx
+if (pending) send({ type: 'DELIVERY_FINISHED', mode: 'audio' });
+onClick={() => send({ type: 'DELIVERY_FINISHED', mode: 'text_only' })}
+onClick={() => send({ type: 'START_TASK', direction: task.direction })}
+onClick={() => send({ type: 'NEW_TURN' })}
+```
 
 ## `SwitchScreen`、`ErrorScreen`、`FallbackScreen`、`AsrEmptyScreen`
 
-换方向：`SWITCH_YES` / `SWITCH_NO`。
+```tsx
+onClick={() => send({ type: 'SWITCH_YES' })}
+onClick={() => send({ type: 'SWITCH_NO' })}
 
-出错：`RETRY` 或 `CANCEL`。
+onClick={() => send({ type: 'RETRY' })}
+onClick={() => send({ type: 'CANCEL' })}
 
-问满或听不清太多次：`RESTART` 或 `CANCEL`。
+onClick={() => send({ type: 'RESTART' })}
+onClick={() => send({ type: 'CANCEL' })}
 
-没听清：`RETRY`，回到录音。
+onClick={() => send({ type: 'RETRY' })}
+```

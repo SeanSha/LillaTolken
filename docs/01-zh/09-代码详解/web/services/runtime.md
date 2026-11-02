@@ -22,13 +22,49 @@
 
 例子：预设是 mock，麦克风模式是默认的 `auto`。`choose()` 返回 `ScriptedRecorder`。点停止就得到剧本，例如「我想去厕所。」
 
-预设是 cloud 或 local 时，永远用 `MediaRecorderRecorder`，也就是真麦克风。
+预设是 cloud 或 local 时，永远用 `MediaRecorderRecorder`，也就是真麦克风。mock 里如果成人把麦克风改成 `real`，仍用剧本交文本，但声音从真麦克风录，用来试权限。
 
 `prepare()` 会在短句快说完时提前打开真麦克风。mock 且不是真麦克风时，这个函数什么也不做。
 
+```ts
+choose() {
+  const { micMode } = settings.get();
+  if (activePreset !== 'mock') {
+    this.real ??= new MediaRecorderRecorder();
+    return this.real;
+  }
+  if (micMode === 'real') {
+    this.real ??= new MediaRecorderRecorder();
+    return new ScriptedRecorder(mockScript, this.real);
+  }
+  return new ScriptedRecorder(mockScript);
+}
+
+async prepare() {
+  const { micMode } = settings.get();
+  if (activePreset === 'mock' && micMode !== 'real') return;
+  await this.real.prepare();
+}
+```
+
 ## `dialogueMachine`
 
-文件末尾调用 `createDialogueMachine({ ... })`。新任务开始时 `onTaskStarted` 记住预设，并把剧本倒回第一句。所以每次新任务，T01 都从「我想去厕所。」重新来。
+文件末尾调用 `createDialogueMachine`。新任务开始时记住预设，并把剧本倒回第一句。所以每次新任务，T01 都从「我想去厕所。」重新来。
+
+```ts
+export const dialogueMachine = createDialogueMachine({
+  providers,
+  recorder,
+  audioStore,
+  speakPrompt: (id, language, hooks) => prompts.speak(id, language, hooks),
+  stopPlayback: () => player.stop(),
+  log: (fields) => logger.log(fields),
+  onTaskStarted: ({ preset }) => {
+    setActivePreset(preset);
+    mockScript.reset();
+  },
+});
+```
 
 ## `reportAudibleStart`
 

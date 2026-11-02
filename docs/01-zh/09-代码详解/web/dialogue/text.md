@@ -5,6 +5,9 @@
 整个文件只有一个函数。确认之前，把模型提出的中文意思说成一句问话。
 
 ```ts
+export const confirmationPrompt = (meaning: string) =>
+  `你是说：${meaning.trim().replace(/[。.!！?？，,\s]+$/u, '')}，对吗？`;
+
 confirmationPrompt('我想去厕所。')
 // '你是说：我想去厕所，对吗？'
 ```

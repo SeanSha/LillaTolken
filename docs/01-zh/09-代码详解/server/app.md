@@ -22,6 +22,23 @@ X-Request-Id
 
 客户端断开时，这里 abort 正在进行的上游调用。所以孩子点取消后，服务器不必把这次识别做完。
 
+```ts
+function context(req) {
+  const presetResult = PresetSchema.safeParse(req.header('x-provider-preset') ?? 'mock');
+  if (!presetResult.success) throw new AppError('BAD_REQUEST', 'unknown provider preset');
+  const preset = presetResult.data;
+  if (!registry[preset].available && preset !== 'local') {
+    throw new AppError('NOT_CONFIGURED', registry[preset].unavailableReason);
+  }
+  const taskId = req.header('x-task-id') ?? '';
+  const requestId = req.header('x-request-id') ?? '';
+  if (!ID_RE.test(taskId) || !ID_RE.test(requestId)) throw new AppError('BAD_REQUEST', 'missing or invalid ids');
+  const controller = new AbortController();
+  req.on('aborted', () => controller.abort());
+  return { provider: { bundle: observed[preset] }, meta: { taskId, requestId, signal: controller.signal }, preset };
+}
+```
+
 ## 翻译相关路由
 
 例子：识别「我想去厕所。」
@@ -34,6 +51,39 @@ X-Request-Id
 - `GET /api/health`：哪几套预设可用，以及版本号。没有密钥。
 
 这些路由没有登录。
+
+```ts
+app.post('/api/asr', async (req, res) => {
+  const { provider, meta } = context(req);
+  const language = LanguageSchema.parse(req.query.language);
+  const text = await provider.bundle.asr.transcribe(
+    {
+      bytes: req.body,
+      mimeType: req.header('content-type'),
+      mockTranscript: req.header('x-mock-transcript') ? decodeURIComponent(req.header('x-mock-transcript')) : undefined,
+    },
+    language,
+    meta,
+  );
+  res.json({ text });
+});
+
+app.post('/api/interpret', async (req, res) => {
+  const { provider, meta } = context(req);
+  const parsed = InterpretRequestSchema.parse(req.body);
+  const result = await provider.bundle.dialogue.interpretChinese(
+    { ...parsed, previousDelivered: config.promptMemory ? parsed.previousDelivered : null },
+    meta,
+  );
+  res.json(result);
+});
+
+app.post('/api/translate', async (req, res) => {
+  const { provider, meta } = context(req);
+  const translation = await provider.bundle.dialogue.translate(TranslateRequestSchema.parse(req.body), meta);
+  res.json({ translation });
+});
+```
 
 ## 词卡和评估
 
