@@ -12,9 +12,9 @@
 
 这里用两种图。
 
-调用顺序图看时间。竖着往下是「我想去厕所。」点「是」的那一遍。实线是调用，格子里的名字能在源码里搜到。界面把事件送进来，状态机先改 context，再调用演员。演员是 `speakPrompt`、`startRecording`、`stopRecording`、`transcribe`、`interpret`、`translate`、`synthesize`。它们再去调 [runtime.ts](../services/runtime.md)。完整的 HTTP 函数链在 [说中文，翻成瑞典语](../../功能/01-说中文翻成瑞典语.md)。
+调用顺序图看时间。竖着往下是「我想去厕所。」点「是」的那一遍。实线是调用，格子里的名字能在源码里搜到。界面把事件送进来，状态机先改 context，再调用 `speakPrompt`、`startRecording`、`stopRecording`、`transcribe`、`interpret`、`translate`、`synthesize`。这些名字写在 `actors` 里，由 `src` 指过去，然后再去调 [runtime.ts](../services/runtime.md)。完整的 HTTP 函数链在 [说中文，翻成瑞典语](../../功能/01-说中文翻成瑞典语.md)。
 
-状态图看阶段。框里的字是这个阶段写下或拿着的 context。箭头写成「事件 / 进入哪里」：斜杠前面是触发这次改变的事件或演员结果，箭头指向的框就是结果。`isStale` 对不上时停在原地，不改 `task`。
+状态图看阶段。框里的字是这个阶段写下或拿着的 context。箭头写成「事件 / 进入哪里」：斜杠前面是触发这次改变的事件，或上面这些函数返回之后，箭头指向的框就是结果。`isStale` 对不上时停在原地，不改 `task`。
 
 ```mermaid
 sequenceDiagram
@@ -24,26 +24,26 @@ sequenceDiagram
 
   UI->>M: START_TASK，方向 ZH_TO_SV
   M->>M: beginTask 写入 task，三个计数为 0，preset 抄进 task.preset
-  M->>RT: 演员 speakPrompt 调用 prompts.speak
-  M->>RT: 演员 startRecording 调用 RecorderFacade.start
+  M->>RT: speakPrompt 调用 prompts.speak
+  M->>RT: startRecording 调用 RecorderFacade.start
   UI->>M: STOP_SEGMENT
-  M->>RT: 演员 stopRecording
+  M->>RT: stopRecording
   M->>M: pendingSegments 加 1，segmentInfo 追加一条
   UI->>M: FINISH_INPUT
   M->>M: 进入 transcribing 时 newRequestId，换掉 activeRequestId
-  M->>RT: 演员 transcribe
+  M->>RT: transcribe
   RT-->>M: texts
   M->>M: dialogueInputs 追加，pendingSegments 归 0
-  M->>RT: 演员 interpret
+  M->>RT: interpret
   RT-->>M: PROPOSE_MEANING
   M->>M: 写入 proposedMeaning，currentQuestion 清空
-  M->>RT: 演员 synthesize，synthInput confirmation
+  M->>RT: synthesize，synthInput confirmation
   UI->>M: CONFIRM_YES
   M->>M: confirmedMeaning 抄自 proposedMeaning
-  M->>RT: 演员 translate，文本是 confirmedMeaning
+  M->>RT: translate，文本是 confirmedMeaning
   RT-->>M: 写入 translatedText
   Note over M: 这时还没有 lastDelivered
-  M->>RT: 演员 synthesize，synthInput result
+  M->>RT: synthesize，synthInput result
   UI->>M: DELIVERY_FINISHED，mode 为 audio
   M->>M: deliveredMemory 写入 lastDelivered
 ```

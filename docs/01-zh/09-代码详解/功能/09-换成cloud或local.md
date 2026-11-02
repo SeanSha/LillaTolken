@@ -2,7 +2,7 @@
 
 例子：同一句「我想去厕所。」，先用 mock 走完，再把预设换成 local 走一遍。孩子点的仍是「中文 → Svenska」「说完了」「是」。屏幕顺序不变。
 
-状态机调用的演员名字不变。`context()` 按 `X-Provider-Preset` 换成下面三套里的一套，再由 `observe` 包住。
+状态机调用的仍是 `transcribe`、`interpret`、`translate`、`synthesize`。`context()` 按 `X-Provider-Preset` 换成下面三套里的一套，再由 `observe` 包住。
 
 ```mermaid
 sequenceDiagram
@@ -14,7 +14,7 @@ sequenceDiagram
   participant CL as cloud/index.ts
   participant LC as local
 
-  M->>API: 演员 transcribe、interpret、translate、synthesize
+  M->>API: transcribe、interpret、translate、synthesize
   API->>SV: 仍是 /api/asr、/api/interpret、/api/translate、/api/tts
   SV->>SV: context 读取 X-Provider-Preset
   SV->>OB: observe
