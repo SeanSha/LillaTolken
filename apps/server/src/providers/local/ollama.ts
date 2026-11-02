@@ -1,4 +1,4 @@
-// Local LLM: Ollama /api/chat on 127.0.0.1 (docs/SYSTEM_DESIGN.md 5.3).
+// Local LLM: Ollama /api/chat on 127.0.0.1 (docs/01-系统设计.md 5.3).
 // Same prompts, same JSON schema, same validation and same policy cap as the Cloud model.
 // This is Ollama LOCAL mode: the model must already be installed (`ollama pull`); a missing model
 // is reported as LOCAL_LLM_MODEL_MISSING and is never routed to any cloud.

@@ -1,4 +1,4 @@
-// Versioned, server-side price registry + cost calculator (docs/SYSTEM_DESIGN.md 6.4).
+// Versioned, server-side price registry + cost calculator (docs/01-系统设计.md 6.4).
 //  - Rates live in apps/server/config/prices.json (never hardcoded here, never writable via the API).
 //  - `null` cost always means "cannot calculate"; it is NEVER shown or summed as $0.00.
 //  - Local inference has a true $0 external API cost (hardware/power excluded); mock is N/A.

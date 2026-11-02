@@ -1,11 +1,14 @@
-// Protected monitoring API (docs/SYSTEM_DESIGN.md 5.4). Every route except login/logout/session
+// Protected monitoring API (docs/01-系统设计.md 5.4). Every route except login/logout/session
 // requires the admin cookie - including exports, pricing and local health.
 import express, { type NextFunction, type Request, type Response, Router } from 'express';
 import { z } from 'zod';
 import {
   AI_STAGES,
+  COST_BASES,
   DirectionSchema,
   PresetSchema,
+  REQUEST_STATUSES,
+  TASK_STATUSES,
   type MonitorFilters,
   type MonitorHealthResponse,
 } from '@kt/shared';
@@ -46,8 +49,10 @@ const FiltersSchema = z.object({
   stage: z.enum(AI_STAGES).optional(),
   feature: z.enum(['translate', 'vocabulary']).optional(),
   model: z.string().max(200).optional(),
-  status: z.string().max(20).optional(),
+  status: z.enum(REQUEST_STATUSES).optional(),
+  taskStatus: z.enum(TASK_STATUSES).optional(),
   scenarioId: z.string().max(100).optional(),
+  costBasis: z.enum(COST_BASES).optional(),
   environment: z.enum(['HOME', 'OUTDOOR', 'UNKNOWN']).optional(),
   networkType: z.enum(['WIFI', 'CELLULAR', 'UNKNOWN']).optional(),
   noiseLevel: z.enum(['QUIET', 'MODERATE', 'NOISY', 'UNKNOWN']).optional(),

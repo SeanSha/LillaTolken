@@ -1,9 +1,9 @@
 import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type FormEvent, type ReactNode } from 'react';
 import type { ModelConfig, TestRun } from '@kt/shared';
-import { AI_STAGES } from '@kt/shared';
+import { AI_FEATURES, AI_STAGES, COST_BASES, REQUEST_STATUSES, TASK_STATUSES } from '@kt/shared';
 import { MonitorApiError, monitorApi } from './api';
 import { CostTab } from './CostTab';
-import { DEFAULT_FILTERS, MonitorContext, resolveFilters, type FilterState, type RangeKey } from './context';
+import { DEFAULT_FILTERS, filtersFor, MonitorContext, resolveFilters, type FilterState, type MonitorTab, type RangeKey } from './context';
 import { EvaluationTab } from './EvaluationTab';
 import { TestSessionsTab } from './TestSessionsTab';
 import { OverviewTab } from './OverviewTab';
@@ -28,7 +28,7 @@ class TabBoundary extends Component<{ children: ReactNode; resetKey: string }, {
   }
 }
 
-type Tab = 'overview' | 'requests' | 'tasks' | 'sessions' | 'evaluation' | 'cost';
+type Tab = MonitorTab;
 const TABS: Array<[Tab, string]> = [
   ['overview', 'Overview'],
   ['requests', 'Request Explorer'],
@@ -116,9 +116,9 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
 
   const key = JSON.stringify(filters);
   const ctx = useMemo(
-    () => ({ filters, key, intervalMs, resolve: () => resolveFilters(filters), onAuthError: onLoggedOut }),
+    () => ({ filters, key, intervalMs, resolve: () => resolveFilters(filters, tab), onAuthError: onLoggedOut }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [key, intervalMs, onLoggedOut],
+    [key, tab, intervalMs, onLoggedOut],
   );
   const set = useCallback(<K extends keyof FilterState>(k: K, v: FilterState[K]) => setFilters((f) => ({ ...f, [k]: v })), []);
 
@@ -158,7 +158,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           </div>
         </header>
 
-        {showFilters && <FilterBar filters={filters} set={set} onReset={() => setFilters(DEFAULT_FILTERS)} />}
+        {showFilters && filtersFor(tab).length > 0 && <FilterBar tab={tab} filters={filters} set={set} onReset={() => setFilters(DEFAULT_FILTERS)} />}
 
         <nav className="mon-tabs" role="tablist">
           {TABS.map(([id, label]) => (
@@ -181,7 +181,14 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   );
 }
 
-function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K extends keyof FilterState>(k: K, v: FilterState[K]) => void; onReset: () => void }) {
+const PRICE_BASIS_LABEL: Record<(typeof COST_BASES)[number], string> = {
+  reported_usage: 'reported usage',
+  estimated: 'estimated',
+  unknown: 'unknown',
+  not_applicable: 'n/a',
+};
+
+function FilterBar({ tab, filters, set, onReset }: { tab: Tab; filters: FilterState; set: <K extends keyof FilterState>(k: K, v: FilterState[K]) => void; onReset: () => void }) {
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [configs, setConfigs] = useState<ModelConfig[]>([]);
   useEffect(() => {
@@ -194,28 +201,62 @@ function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K ex
     const timer = setInterval(load, 15_000);
     return () => { stop = true; clearInterval(timer); };
   }, []);
+  const fields = filtersFor(tab);
   return (
     <section className="mon-filters" aria-label="Filters">
-      <label>
-        Range
-        <select value={filters.range} onChange={(e) => set('range', e.target.value as RangeKey)}>
-          <option value="today">Today</option>
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-          <option value="all">All time</option>
-          <option value="custom">Custom…</option>
-        </select>
-      </label>
-      {filters.range === 'custom' && (
-        <>
-          <label>
-            From <input type="datetime-local" value={filters.customFrom} onChange={(e) => set('customFrom', e.target.value)} />
-          </label>
-          <label>
-            To <input type="datetime-local" value={filters.customTo} onChange={(e) => set('customTo', e.target.value)} />
-          </label>
-        </>
-      )}
+      {fields.map((field) => (
+        <FilterControl key={field} field={field} tab={tab} filters={filters} set={set} runs={runs} configs={configs} />
+      ))}
+      <button type="button" onClick={onReset}>
+        Reset
+      </button>
+    </section>
+  );
+}
+
+function FilterControl({
+  field,
+  tab,
+  filters,
+  set,
+  runs,
+  configs,
+}: {
+  field: keyof FilterState;
+  tab: Tab;
+  filters: FilterState;
+  set: <K extends keyof FilterState>(k: K, v: FilterState[K]) => void;
+  runs: TestRun[];
+  configs: ModelConfig[];
+}) {
+  if (field === 'range') {
+    return (
+      <>
+        <label>
+          {tab === 'tasks' || tab === 'sessions' ? 'Started' : 'Time'}
+          <select value={filters.range} onChange={(e) => set('range', e.target.value as RangeKey)}>
+            <option value="today">Today</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="all">All time</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </label>
+        {filters.range === 'custom' && (
+          <>
+            <label>
+              From <input type="datetime-local" value={filters.customFrom} onChange={(e) => set('customFrom', e.target.value)} />
+            </label>
+            <label>
+              To <input type="datetime-local" value={filters.customTo} onChange={(e) => set('customTo', e.target.value)} />
+            </label>
+          </>
+        )}
+      </>
+    );
+  }
+  if (field === 'preset') {
+    return (
       <label>
         Provider
         <select value={filters.preset} onChange={(e) => set('preset', e.target.value as FilterState['preset'])} data-testid="filter-preset">
@@ -225,14 +266,22 @@ function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K ex
           <option value="mock">mock</option>
         </select>
       </label>
+    );
+  }
+  if (field === 'direction') {
+    return (
       <label>
         Direction
         <select value={filters.direction} onChange={(e) => set('direction', e.target.value as FilterState['direction'])}>
           <option value="">both</option>
-          <option value="ZH_TO_SV">中→瑞</option>
-          <option value="SV_TO_ZH">瑞→中</option>
+          <option value="ZH_TO_SV">ZH→SV</option>
+          <option value="SV_TO_ZH">SV→ZH</option>
         </select>
       </label>
+    );
+  }
+  if (field === 'stage') {
+    return (
       <label>
         Stage
         <select value={filters.stage} onChange={(e) => set('stage', e.target.value as FilterState['stage'])}>
@@ -242,24 +291,86 @@ function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K ex
           ))}
         </select>
       </label>
+    );
+  }
+  if (field === 'model') {
+    return (
       <label>
-        Model
+        Engine / model
         <input value={filters.model} placeholder="substring" onChange={(e) => set('model', e.target.value)} />
       </label>
+    );
+  }
+  if (field === 'feature') {
+    return (
       <label>
-        Status
-        <select value={filters.status} onChange={(e) => set('status', e.target.value)}>
+        Feature
+        <select value={filters.feature} onChange={(e) => set('feature', e.target.value as FilterState['feature'])}>
           <option value="">all</option>
-          <option value="succeeded">succeeded</option>
-          <option value="failed">failed</option>
-          <option value="cancelled">cancelled</option>
-          <option value="timeout">timeout</option>
+          {AI_FEATURES.map((feature) => (
+            <option key={feature} value={feature}>
+              {feature}
+            </option>
+          ))}
         </select>
       </label>
+    );
+  }
+  if (field === 'status') {
+    return (
+      <label>
+        {tab === 'sessions' ? 'Request status' : 'Status'}
+        <select value={filters.status} onChange={(e) => set('status', e.target.value as FilterState['status'])}>
+          <option value="">all</option>
+          {REQUEST_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  if (field === 'taskStatus') {
+    return (
+      <label>
+        Outcome
+        <select value={filters.taskStatus} onChange={(e) => set('taskStatus', e.target.value as FilterState['taskStatus'])}>
+          <option value="">all</option>
+          {TASK_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  if (field === 'costBasis') {
+    return (
+      <label>
+        Price basis
+        <select value={filters.costBasis} onChange={(e) => set('costBasis', e.target.value as FilterState['costBasis'])}>
+          <option value="">all</option>
+          {COST_BASES.map((basis) => (
+            <option key={basis} value={basis}>
+              {PRICE_BASIS_LABEL[basis]}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  if (field === 'scenarioId') {
+    return (
       <label>
         Scenario
         <input value={filters.scenarioId} placeholder="id" onChange={(e) => set('scenarioId', e.target.value)} />
       </label>
+    );
+  }
+  if (field === 'environment') {
+    return (
       <label>
         Environment
         <select value={filters.environment} onChange={(e) => set('environment', e.target.value as FilterState['environment'])}>
@@ -269,6 +380,10 @@ function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K ex
           <option value="UNKNOWN">UNKNOWN</option>
         </select>
       </label>
+    );
+  }
+  if (field === 'networkType') {
+    return (
       <label>
         Network
         <select value={filters.networkType} onChange={(e) => set('networkType', e.target.value as FilterState['networkType'])}>
@@ -278,6 +393,10 @@ function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K ex
           <option value="UNKNOWN">UNKNOWN</option>
         </select>
       </label>
+    );
+  }
+  if (field === 'noiseLevel') {
+    return (
       <label>
         Noise
         <select value={filters.noiseLevel} onChange={(e) => set('noiseLevel', e.target.value as FilterState['noiseLevel'])}>
@@ -288,6 +407,22 @@ function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K ex
           <option value="UNKNOWN">UNKNOWN</option>
         </select>
       </label>
+    );
+  }
+  if (field === 'runStatus') {
+    return (
+      <label>
+        Session status
+        <select value={filters.runStatus} onChange={(e) => set('runStatus', e.target.value as FilterState['runStatus'])}>
+          <option value="">all</option>
+          <option value="active">active</option>
+          <option value="ended">ended</option>
+        </select>
+      </label>
+    );
+  }
+  if (field === 'testRunId') {
+    return (
       <label>
         Test session
         <select value={filters.testRunId} onChange={(e) => set('testRunId', e.target.value)}>
@@ -299,6 +434,10 @@ function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K ex
           ))}
         </select>
       </label>
+    );
+  }
+  if (field === 'modelConfigId') {
+    return (
       <label>
         Model configuration
         <select value={filters.modelConfigId} onChange={(e) => set('modelConfigId', e.target.value)}>
@@ -310,9 +449,7 @@ function FilterBar({ filters, set, onReset }: { filters: FilterState; set: <K ex
           ))}
         </select>
       </label>
-      <button type="button" onClick={onReset}>
-        Reset
-      </button>
-    </section>
-  );
+    );
+  }
+  return null;
 }

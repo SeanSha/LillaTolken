@@ -376,6 +376,22 @@ button {
   line-height: 1.25;
   text-shadow: 0 1px 1px rgba(36, 50, 71, 0.18);
 }
+.btn-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  line-height: 1.1;
+  text-align: center;
+}
+.btn-copy small {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.15;
+  opacity: 0.92;
+}
 .home-actions .action-label .icon {
   width: 34px;
   height: 34px;
@@ -613,6 +629,52 @@ button {
   min-height: 92px;
   font-size: 20px;
 }
+.result-actions .btn-copy small {
+  font-size: 12px;
+  max-width: 11em;
+}
+.lang-route {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.lang-route svg {
+  width: 34px;
+  height: 23px;
+  display: block;
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(36, 50, 71, 0.28);
+}
+.lang-route-arrow {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+}
+.direction-banner {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 2px 16px 0;
+}
+.lang-route--banner {
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 4px 0 rgba(185, 210, 232, 0.9);
+}
+.lang-route--banner svg {
+  width: 72px;
+  height: 48px;
+  border-radius: 6px;
+  flex: none;
+}
+.lang-route--banner .lang-route-arrow {
+  color: var(--ink);
+  font-size: 32px;
+}
 
 /* ---------- switch / message ---------- */
 .switch-symbol,
@@ -725,6 +787,20 @@ button {
   }
   .timer strong {
     font-size: 38px;
+  }
+  .direction-banner {
+    padding-top: 0;
+  }
+  .lang-route--banner {
+    gap: 8px;
+    padding: 6px 12px;
+  }
+  .lang-route--banner svg {
+    width: 56px;
+    height: 38px;
+  }
+  .lang-route--banner .lang-route-arrow {
+    font-size: 26px;
   }
   .single-action {
     min-height: 76px;

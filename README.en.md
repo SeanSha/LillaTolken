@@ -10,7 +10,9 @@ This is an **adult feasibility prototype**. It is for trying the conversation fl
 
 One thing at a time. The main buttons sit in the lower half of the screen, and icons, color, and sound are enough to use them. Chinese and Swedish are shown together, mainly for the adult nearby.
 
-These frames are the current screens. The spoken ones use a built-in example, 「我想去厕所」, not a real recording. The apple and the cup on the cards are drawings made to show the screen.
+These frames are the current screens (recaptured from the running app). The spoken ones use built-in synthetic examples, not a real recording. The apple and the cup on the cards are drawings made to show the screen.
+
+**Home**
 
 <table>
   <tr>
@@ -19,32 +21,55 @@ These frames are the current screens. The spoken ones use a built-in example, �
       <b>Choose a direction</b><br>
       Speak Chinese, speak Swedish, or take a photo
     </td>
+  </tr>
+</table>
+
+**Chinese → Swedish** (synthetic example 「我想去厕所」; unclear meaning adds one short question)
+
+<table>
+  <tr>
     <td align="center" width="33%">
-      <img src="docs/screenshots/02-listening.png" alt="Listening: a 30-second countdown and a stop button" width="220"><br>
-      <b>I'm listening</b><br>
-      Stop when this short turn is done
+      <img src="docs/screenshots/zh-sv/02-listening.png" alt="Chinese→Swedish: listening" width="220"><br>
+      <b>I'm listening</b>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/03-continue.png" alt="After one turn, choose to keep speaking or finish" width="220"><br>
-      <b>Anything more?</b><br>
-      Keep speaking, or finish
+      <img src="docs/screenshots/zh-sv/03-continue.png" alt="Chinese→Swedish: continue or finish" width="220"><br>
+      <b>Anything more?</b>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/zh-sv/04-question.png" alt="Chinese→Swedish: one small question" width="220"><br>
+      <b>One small question</b>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="docs/screenshots/04-question.png" alt="When the meaning is unclear, ask one short question" width="220"><br>
-      <b>One small question</b><br>
-      If it is unclear, ask only once more
+      <img src="docs/screenshots/zh-sv/05-confirm.png" alt="Chinese→Swedish: confirm meaning" width="220"><br>
+      <b>Confirm first</b>
     </td>
     <td align="center">
-      <img src="docs/screenshots/05-confirm.png" alt="Confirm the meaning before translating: yes or no" width="220"><br>
-      <b>Confirm first</b><br>
-      Translate only after a yes
+      <img src="docs/screenshots/zh-sv/06-result.png" alt="Chinese→Swedish: translation result" width="220"><br>
+      <b>Say it aloud</b>
     </td>
-    <td align="center">
-      <img src="docs/screenshots/06-result.png" alt="Result: the Chinese meaning and the Swedish sentence, ready to hear again" width="220"><br>
-      <b>Say it aloud</b><br>
-      Text and voice together
+  </tr>
+</table>
+
+**Swedish → Chinese** (synthetic example 「Lägg boken på bordet.」; no clarification or confirmation)
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/sv-zh/02-listening.png" alt="Swedish→Chinese: listening with English button labels" width="220"><br>
+      <b>I'm listening</b><br>
+      Buttons also show English
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/sv-zh/03-continue.png" alt="Swedish→Chinese: continue or finish" width="220"><br>
+      <b>Anything more?</b>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/sv-zh/06-result.png" alt="Swedish→Chinese: Swedish source and Chinese" width="220"><br>
+      <b>Chinese result</b><br>
+      Source + Chinese together
     </td>
   </tr>
 </table>
@@ -135,7 +160,7 @@ In the on-Mac mode, identifying the photo also stays on this computer. Cloud mod
 
 The same page opens in Safari on a phone. Cloud mode sends recordings off this computer. Do not use it with children, and do not say personal information.
 
-Setup, phone access, the on-Mac engines, and the monitoring panel are in the [developer guide](docs/DEVELOPER_GUIDE.md) (Chinese).
+Setup, phone access, the on-Mac engines, and the monitoring panel are in [02 Developer guide](docs/02-开发说明.md) (Chinese).
 
 ## What this version cares about
 
@@ -147,8 +172,11 @@ Setup, phone access, the on-Mac engines, and the monitoring panel are in the [de
 
 ## Read on
 
-- [Developer guide](docs/DEVELOPER_GUIDE.md) (Chinese): how to run it, try it on a phone, and open monitoring
-- [System design](docs/SYSTEM_DESIGN.md) (Chinese): the full product and technical design
+- [01 System design](docs/01-系统设计.md): the full product and technical design
+- [02 Developer guide](docs/02-开发说明.md) (Chinese): how to run it, try it on a phone, and open monitoring
+- [03 UI design brief](docs/03-界面设计需求.md) (Chinese): screens, buttons, and constraints for a design tool
+- [04 Tab5 feasibility](docs/04-Tab5迁移可行性.md) (Chinese): whether this can move onto Tab5 hardware
+- [05 Code guide](docs/05-代码导读.md) (Chinese): the architecture, what each file does, and how one turn runs
 
 ## License
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TelemetryDb, type NewRequest } from '../../apps/server/src/telemetry/db';
-import { vocabularyUsage } from '../../apps/server/src/telemetry/queries';
+import { listRequests, listTasks, vocabularyUsage } from '../../apps/server/src/telemetry/queries';
 
 let seq = 0;
 function row(over: Partial<NewRequest> & Pick<NewRequest, 'taskId' | 'stage'>): NewRequest {
@@ -102,6 +102,34 @@ describe('vocabulary cost accounting', () => {
     expect(report.actions.card_created).toBe(1);
     expect(report.actions.replace_after_duplicate).toBe(0);
     expect(report.actionNote).toMatch(/skip a vision call/i);
+    db.close();
+  });
+
+  it('filters vocabulary rows by the same request attributes the table shows', () => {
+    const db = new TelemetryDb(':memory:');
+    db.recordRequest(row({ taskId: 'translate.1', stage: 'TRANSLATE', modelTag: 'gpt-6-luna', costBasis: 'reported_usage' }));
+    db.recordRequest(row({ taskId: 'vocab.card-1', stage: 'IDENTIFY', feature: 'vocabulary', cardId: 'card-1', modelTag: 'gpt-6-luna' }));
+    db.recordRequest(row({ taskId: 'vocab.card-1', stage: 'TTS', feature: 'vocabulary', cardId: 'card-1', modelTag: 'gpt-realtime-mini', status: 'failed' }));
+
+    const identify = vocabularyUsage(db, { stage: 'IDENTIFY' });
+    expect(identify.identify.requests).toBe(1);
+    expect(identify.translation.requests).toBe(0);
+    expect(identify.ttsZh.requests).toBe(0);
+
+    const luna = vocabularyUsage(db, { model: 'luna' });
+    expect(luna.vocabulary.requests).toBe(1);
+    expect(luna.translation.requests).toBe(1);
+
+    const vocabOnly = vocabularyUsage(db, { feature: 'vocabulary' });
+    expect(vocabOnly.vocabulary.requests).toBe(2);
+    expect(vocabOnly.translation.requests).toBe(0);
+
+    const page = { limit: 10, offset: 0 };
+    expect(listRequests(db, { model: 'realtime' }, page).rows.map((row) => row.stage)).toEqual(['TTS']);
+    expect(listRequests(db, { status: 'failed', costBasis: 'unknown' }, page).total).toBe(1);
+    expect(listTasks(db, { status: 'failed' }, page).total).toBe(2);
+    expect(listTasks(db, { taskStatus: 'active' }, page).total).toBe(2);
+    expect(listTasks(db, { taskStatus: 'delivered' }, page).total).toBe(0);
     db.close();
   });
 });

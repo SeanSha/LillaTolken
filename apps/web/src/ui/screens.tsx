@@ -4,14 +4,13 @@ import { inspectMicEnvironment } from '../audio/recorder';
 import { confirmationPrompt } from '../dialogue/text';
 import { player } from '../services/runtime';
 import { useSettings } from '../services/settings';
-import { Icon, Mascot } from './art';
+import { Icon, LanguageMark, Mascot } from './art';
 import { BigButton } from './BigButton';
 import { useCountdown, usePlayback } from './hooks';
 
 type ScreenProps = { snap: DialogueSnapshot; send: Send };
 
 const FLAG: Record<'zh' | 'sv', string> = { zh: '🇨🇳', sv: '🇸🇪' };
-export const directionFlags = (d: Direction) => (d === 'ZH_TO_SV' ? `${FLAG.zh}➜${FLAG.sv}` : `${FLAG.sv}➜${FLAG.zh}`);
 
 // ---------------------------------------------------------------- shared bits
 const FLAGS = (from: 'zh' | 'sv') => (
@@ -26,6 +25,21 @@ function Titles({ zh, sv, compact = false }: { zh: string; sv: string; compact?:
       <div className={`title${compact ? ' compact' : ''}`}>{zh}</div>
       <div className="subtitle">{sv}</div>
     </div>
+  );
+}
+
+/** Swedish → Chinese is the teacher's turn. Keep the Chinese label and add English underneath. */
+function teacherFacing(snap: DialogueSnapshot) {
+  return snap.context.task?.direction === 'SV_TO_ZH';
+}
+
+function ActionLabel({ zh, en, teacher }: { zh: string; en: string; teacher: boolean }) {
+  if (!teacher) return <span>{zh}</span>;
+  return (
+    <span className="btn-copy">
+      <span>{zh}</span>
+      <small lang="en">{en}</small>
+    </span>
   );
 }
 
@@ -74,7 +88,7 @@ export function HomeScreen({ snap, send, onPhotoCards, onMyCards }: ScreenProps 
             <Icon name="mic" />
             说瑞典语
           </span>
-          <small>Prata svenska</small>
+          <small lang="en">Speak Swedish · Prata svenska</small>
         </BigButton>
         <div className="vocab-home-row">
           <BigButton testId="start-photo-vocab" tone="purple" className="vocab-entry" label="Photo Vocabulary" onClick={onPhotoCards}>
@@ -109,6 +123,7 @@ export function RecordingScreen({ snap, send }: ScreenProps) {
   const listening = snap.matches({ task: { recording: 'listening' } });
   const prompting = snap.matches({ task: { recording: 'prompting' } });
   const remaining = useCountdown(snap.context.segmentStartedAt, listening);
+  const teacher = teacherFacing(snap);
   const purpose = task?.inputPurpose ?? 'INITIAL';
   const segmentNo = (task?.pendingSegments ?? 0) + 1;
   const fraction = listening ? remaining / LIMITS.segmentSeconds : 1;
@@ -139,12 +154,12 @@ export function RecordingScreen({ snap, send }: ScreenProps) {
       {listening ? (
         <BigButton testId="stop" tone="red" pulse className="single-action" label="Stop" onClick={() => send({ type: 'STOP_SEGMENT' })}>
           <Icon name="stop" />
-          <span>说完这一段</span>
+          <ActionLabel zh="说完这一段" en="Stop" teacher={teacher} />
         </BigButton>
       ) : prompting ? (
         <BigButton testId="skip-prompt" tone="green" className="single-action" label="Start speaking" onClick={() => send({ type: 'SKIP_PROMPT' })}>
           <Icon name="mic" />
-          <span>开始说</span>
+          <ActionLabel zh="开始说" en="Start speaking" teacher={teacher} />
         </BigButton>
       ) : (
         <BigButton tone="gray" disabled className="single-action" label="Wait" onClick={() => undefined}>
@@ -158,6 +173,7 @@ export function RecordingScreen({ snap, send }: ScreenProps) {
 // ---------------------------------------------------------------- Continue / Finished
 export function SegmentDecisionScreen({ snap, send }: ScreenProps) {
   const count = snap.context.task?.pendingSegments ?? 0;
+  const teacher = teacherFacing(snap);
   return (
     <div className="screen decision">
       <ProgressDots done={count} recording={false} />
@@ -166,11 +182,11 @@ export function SegmentDecisionScreen({ snap, send }: ScreenProps) {
       <div className="split-actions">
         <BigButton testId="continue" tone="blue" label="Continue" onClick={() => send({ type: 'CONTINUE_SPEAKING' })}>
           <Icon name="plus" />
-          <span>继续说</span>
+          <ActionLabel zh="继续说" en="Continue" teacher={teacher} />
         </BigButton>
         <BigButton testId="finish" tone="green" label="Finished" onClick={() => send({ type: 'FINISH_INPUT' })}>
           <span className="big-symbol">✓</span>
-          <span>说完了</span>
+          <ActionLabel zh="说完了" en="Finished" teacher={teacher} />
         </BigButton>
       </div>
     </div>
@@ -224,13 +240,14 @@ export function QuestionScreen({ snap, send, kind }: ScreenProps & { kind: 'clar
   const ready = snap.context.audioStatus === 'ready';
   const failed = snap.context.audioStatus === 'failed';
   const playback = usePlayback('prompt', ready, true);
+  const teacher = teacherFacing(snap);
   const text = kind === 'clarify' ? task?.currentQuestion : task?.proposedMeaning;
   const adultText = kind === 'confirm' ? confirmationPrompt(text ?? '') : text;
 
   const replay = failed ? (
     <BigButton testId="retry-audio" tone="orange" label="Retry audio" onClick={() => send({ type: 'RETRY' })}>
       <Icon name="retry" />
-      <span>重试声音</span>
+      <ActionLabel zh="重试声音" en="Retry sound" teacher={teacher} />
     </BigButton>
   ) : kind === 'confirm' ? (
     <button type="button" className={`sound-bubble${playback.blocked || playback.playing ? ' pulse' : ''}`} data-testid="replay" aria-label="Replay" disabled={!ready} onClick={playback.play}>
@@ -253,12 +270,12 @@ export function QuestionScreen({ snap, send, kind }: ScreenProps & { kind: 'clar
           ) : (
             <BigButton testId="replay" tone="purple" pulse={playback.blocked || playback.playing} label="Replay" disabled={!ready} onClick={playback.play}>
               <Icon name="sound" />
-              <span>再听一次</span>
+              <ActionLabel zh="再听一次" en="Hear again" teacher={teacher} />
             </BigButton>
           )}
           <BigButton testId="answer" tone="red" label="Answer" onClick={() => send({ type: 'START_ANSWER' })}>
             <Icon name="mic" />
-            <span>回答</span>
+            <ActionLabel zh="回答" en="Answer" teacher={teacher} />
           </BigButton>
         </div>
       ) : (
@@ -267,11 +284,11 @@ export function QuestionScreen({ snap, send, kind }: ScreenProps & { kind: 'clar
           <div className="split-actions">
             <BigButton testId="confirm-yes" tone="green" label="Yes" onClick={() => send({ type: 'CONFIRM_YES' })}>
               <span className="big-symbol">✓</span>
-              <span>对!</span>
+              <ActionLabel zh="对!" en="Yes" teacher={teacher} />
             </BigButton>
             <BigButton testId="confirm-no" tone="red" label="No" onClick={() => send({ type: 'CONFIRM_NO' })}>
               <span className="big-symbol">×</span>
-              <span>不对</span>
+              <ActionLabel zh="不对" en="No" teacher={teacher} />
             </BigButton>
           </div>
         </>
@@ -294,6 +311,7 @@ export function ResultScreen({ snap, send }: ScreenProps) {
   });
   if (!task) return null;
   const zhToSv = task.direction === 'ZH_TO_SV';
+  const teacher = !zhToSv;
 
   return (
     <div className="screen result">
@@ -338,30 +356,35 @@ export function ResultScreen({ snap, send }: ScreenProps) {
         <div className="stack-actions">
           <BigButton testId="retry-audio" tone="orange" label="Retry audio" onClick={() => send({ type: 'RETRY' })}>
             <Icon name="retry" />
-            <span>重试声音</span>
+            <ActionLabel zh="重试声音" en="Retry sound" teacher={teacher} />
           </BigButton>
           <BigButton testId="accept-text-only" tone="gray" label="Text only" onClick={() => send({ type: 'DELIVERY_FINISHED', mode: 'text_only' })}>
-            <span>只看文字</span>
+            <ActionLabel zh="只看文字" en="Text only" teacher={teacher} />
           </BigButton>
         </div>
       )}
       {pending && active.failed && (
         <BigButton testId="regenerate" tone="orange" label="Retry audio" onClick={() => send({ type: 'RETRY' })}>
           <Icon name="retry" />
-          <span>重试声音</span>
+          <ActionLabel zh="重试声音" en="Retry sound" teacher={teacher} />
         </BigButton>
       )}
 
       {delivered && (
         <div className="result-actions">
-          {/* Primary (larger, left): record again in the same direction. Secondary: back to the start screen. */}
-          <BigButton testId="re-record" tone="red" label="Re-record" onClick={() => send({ type: 'START_TASK', direction: task.direction })}>
-            <Icon name="mic" />
-            <span>再说一次</span>
+          {/* Primary: speak the same source language again. Secondary: leave this turn and go home. */}
+          <BigButton
+            testId="re-record"
+            tone="red"
+            label={zhToSv ? 'Speak Chinese again' : 'Speak Swedish again'}
+            onClick={() => send({ type: 'START_TASK', direction: task.direction })}
+          >
+            <LanguageMark from={zhToSv ? 'zh' : 'sv'} />
+            <ActionLabel zh={zhToSv ? '再说中文' : '再说瑞典语'} en={zhToSv ? 'Speak Chinese again' : 'Speak Swedish again'} teacher />
           </BigButton>
-          <BigButton testId="new-turn" tone="gray" label="New turn" onClick={() => send({ type: 'NEW_TURN' })}>
-            <Icon name="plus" />
-            <span>新一轮</span>
+          <BigButton testId="new-turn" tone="gray" label="Home" onClick={() => send({ type: 'NEW_TURN' })}>
+            <Icon name="home" />
+            <ActionLabel zh="回首页" en="Home" teacher />
           </BigButton>
         </div>
       )}
@@ -372,6 +395,7 @@ export function ResultScreen({ snap, send }: ScreenProps) {
 // ---------------------------------------------------------------- Direction switch confirmation
 export function SwitchScreen({ snap, send }: ScreenProps) {
   const target = snap.context.pendingDirection ?? (snap.context.task ? otherDirection(snap.context.task.direction) : 'SV_TO_ZH');
+  const teacher = teacherFacing(snap);
   const [from, to] = target === 'ZH_TO_SV' ? [FLAG.zh, FLAG.sv] : [FLAG.sv, FLAG.zh];
   return (
     <div className="screen switch">
@@ -386,10 +410,10 @@ export function SwitchScreen({ snap, send }: ScreenProps) {
       </div>
       <div className="stack-actions">
         <BigButton testId="switch-yes" tone="blue" label="Switch" onClick={() => send({ type: 'SWITCH_YES' })}>
-          <span>切换方向</span>
+          <ActionLabel zh="切换方向" en="Switch direction" teacher={teacher} />
         </BigButton>
         <BigButton testId="switch-no" tone="gray" label="Keep going" onClick={() => send({ type: 'SWITCH_NO' })}>
-          <span>继续当前方向</span>
+          <ActionLabel zh="继续当前方向" en="Keep going" teacher={teacher} />
         </BigButton>
       </div>
     </div>
@@ -424,6 +448,7 @@ function MessageScreen({ symbol, title, note, noteTestId, className, children }:
 
 export function ErrorScreen({ snap, send }: ScreenProps) {
   const error = snap.context.error;
+  const teacher = teacherFacing(snap);
   return (
     <MessageScreen
       className="error"
@@ -440,10 +465,10 @@ export function ErrorScreen({ snap, send }: ScreenProps) {
     >
       <BigButton testId="retry" tone="orange" label="Retry" onClick={() => send({ type: 'RETRY' })}>
         <Icon name="retry" />
-        <span>再试一次</span>
+        <ActionLabel zh="再试一次" en="Try again" teacher={teacher} />
       </BigButton>
       <BigButton testId="cancel-error" tone="gray" label="Cancel" onClick={() => send({ type: 'CANCEL' })}>
-        <span>取消</span>
+        <ActionLabel zh="取消" en="Cancel" teacher={teacher} />
       </BigButton>
     </MessageScreen>
   );
@@ -457,14 +482,15 @@ const FALLBACK_TEXT: Record<string, string> = {
 };
 
 export function FallbackScreen({ snap, send }: ScreenProps) {
+  const teacher = teacherFacing(snap);
   return (
     <MessageScreen className="fallback" symbol="?" title={{ zh: '我们换个办法吧', sv: 'Vi provar något annat' }} noteTestId="fallback-text" note={FALLBACK_TEXT[snap.context.fallbackReason ?? 'UNRESOLVED']}>
       <BigButton testId="restart" tone="orange" label="Restart" onClick={() => send({ type: 'RESTART' })}>
         <Icon name="retry" />
-        <span>重新开始</span>
+        <ActionLabel zh="重新开始" en="Start over" teacher={teacher} />
       </BigButton>
       <BigButton testId="cancel-fallback" tone="gray" label="Cancel" onClick={() => send({ type: 'CANCEL' })}>
-        <span>取消</span>
+        <ActionLabel zh="取消" en="Cancel" teacher={teacher} />
       </BigButton>
     </MessageScreen>
   );
@@ -472,11 +498,12 @@ export function FallbackScreen({ snap, send }: ScreenProps) {
 
 export function AsrEmptyScreen({ snap, send }: ScreenProps) {
   const left = LIMITS.asrRetries - (snap.context.task?.asrRetryCount ?? 0);
+  const teacher = teacherFacing(snap);
   return (
     <MessageScreen className="asr-empty" symbol="👂" title={{ zh: '没有听清楚', sv: 'Hörde inget' }} noteTestId="asr-empty-text" note={`没听清,请再说一遍 · försök kvar: ${left}`}>
       <BigButton testId="record-again" tone="red" pulse label="Again" onClick={() => send({ type: 'RETRY' })}>
         <Icon name="mic" />
-        <span>再说一遍</span>
+        <ActionLabel zh="再说一遍" en="Say it again" teacher={teacher} />
       </BigButton>
     </MessageScreen>
   );

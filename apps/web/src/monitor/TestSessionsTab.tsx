@@ -46,7 +46,7 @@ function costText(s: { costKnownUsd: number; costEstimatedUsd: number; costUnkno
 }
 
 export function TestSessionsTab() {
-  const { resolve, key, intervalMs, onAuthError } = useMonitor();
+  const { filters, resolve, key, intervalMs, onAuthError } = useMonitor();
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -167,7 +167,15 @@ export function TestSessionsTab() {
             </tr>
           </thead>
           <tbody>
-            {(runs.data?.runs ?? []).map((run) => {
+            {(runs.data?.runs ?? [])
+              .filter((run) => {
+                if (filters.environment && run.environment !== filters.environment) return false;
+                if (filters.networkType && run.networkType !== filters.networkType) return false;
+                if (filters.noiseLevel && run.noiseLevel !== filters.noiseLevel) return false;
+                if (filters.runStatus && run.status !== filters.runStatus) return false;
+                return true;
+              })
+              .map((run) => {
               const url = joinUrl(`/?eval=${run.code}`);
               return (
                 <tr key={run.testRunId}>

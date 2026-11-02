@@ -333,7 +333,7 @@ The goal is to choose a **technically feasible AI provider** and verify the dial
 
 ```text
 child-translator/
-  docs/SYSTEM_DESIGN.md       # THIS file; only authoritative policy document
+  docs/01-系统设计.md       # THIS file; only authoritative policy document
   apps/web/src/
     ui/                       # screens and adult text panel
     dialogue/                 # XState machine + types
@@ -358,7 +358,7 @@ Optional future `CLOUD_PROVIDER.md` and `LOCAL_PROVIDER.md` may describe setup/m
 
 ## 9. Paste into Cursor Agent now
 
-> Read `docs/SYSTEM_DESIGN.md` fully. **Implement Milestone 1 only.** Create one mobile-first React/TypeScript app and one XState v5 machine for the Chinese–Swedish translator. Implement the child-friendly five-screen UI, per-segment 30-second timer, Continue/Finished, Chinese clarification (max three), mandatory confirmation, Swedish direct translation, independent direction-switch confirmation, one-message volatile memory, and typed ASR/DialogueModel/TTS interfaces. Implement a deterministic Mock preset; add machine unit tests for the acceptance invariants. Do **not** integrate OpenAI, Ollama, Whisper, or Piper yet. Do not build separate Cloud/Local applications. Do not handle actual child data. Report how to run the app, test results and known limitations, then **stop after Milestone 1**.
+> Read `docs/01-系统设计.md` fully. **Implement Milestone 1 only.** Create one mobile-first React/TypeScript app and one XState v5 machine for the Chinese–Swedish translator. Implement the child-friendly five-screen UI, per-segment 30-second timer, Continue/Finished, Chinese clarification (max three), mandatory confirmation, Swedish direct translation, independent direction-switch confirmation, one-message volatile memory, and typed ASR/DialogueModel/TTS interfaces. Implement a deterministic Mock preset; add machine unit tests for the acceptance invariants. Do **not** integrate OpenAI, Ollama, Whisper, or Piper yet. Do not build separate Cloud/Local applications. Do not handle actual child data. Report how to run the app, test results and known limitations, then **stop after Milestone 1**.
 
 **References:** [XState v5](https://stately.ai/docs/setup), [XState invoked actors](https://stately.ai/docs/invoke), [getUserMedia](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia), [MediaRecorder MIME detection](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder/isTypeSupported_static).
 

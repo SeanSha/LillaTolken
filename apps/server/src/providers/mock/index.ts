@@ -1,4 +1,4 @@
-// Deterministic Mock provider (docs/SYSTEM_DESIGN.md 5.1). No network, no randomness.
+// Deterministic Mock provider (docs/01-系统设计.md 5.1). No network, no randomness.
 // It exercises the REAL dialogue machine: clear Chinese, ambiguity, clarification answers,
 // confirmation No, Swedish input, and one-shot recoverable errors via markers in scripted input.
 import {

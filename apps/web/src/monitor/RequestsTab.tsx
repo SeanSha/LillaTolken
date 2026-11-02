@@ -55,6 +55,7 @@ export function RequestsTab() {
               <th>requestId</th>
               <th>taskId</th>
               <th>Provider</th>
+              <th>Feature</th>
               <SortTh label="Stage" field="stage" sort={sort} order={order} onSort={onSort} />
               <SortTh label="Engine / model" field="modelTag" sort={sort} order={order} onSort={onSort} />
               <th>Direction</th>
@@ -74,12 +75,13 @@ export function RequestsTab() {
                 <td className="mono">{r.requestId}</td>
                 <td className="mono">{r.taskId}</td>
                 <td>{r.preset}</td>
+                <td>{r.feature}</td>
                 <td>{r.stage}</td>
                 <td className="mono">{r.modelTag}</td>
                 <td>{r.direction ? r.direction.replace('_TO_', '→') : '—'}</td>
                 <td>{r.inputAudioMs !== null ? (r.inputAudioMs / 1000).toFixed(1) : '—'}</td>
                 <td>{fmtMs(r.durationMs)}</td>
-                <td>{r.status === 'succeeded' ? 'ok' : `${r.status}${r.errorCode ? ` · ${r.errorCode}` : ''}`}</td>
+                <td>{r.errorCode ? `${r.status} · ${r.errorCode}` : r.status}</td>
                 <td>
                   {fmtInt(r.promptTokens)} / {fmtInt(r.outputTokens)}
                 </td>
@@ -90,7 +92,7 @@ export function RequestsTab() {
             ))}
             {d && d.rows.length === 0 && (
               <tr>
-                <td colSpan={14} className="mon-empty">
+                <td colSpan={15} className="mon-empty">
                   No requests match these filters.
                 </td>
               </tr>

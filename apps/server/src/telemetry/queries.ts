@@ -222,6 +222,11 @@ export function listResponseLatencies(db: TelemetryDb, f: MonitorFilters): Respo
 const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
+/** Substring match for the engine/model column. `%` and `_` in the typed text stay literal. */
+function likeContains(value: string): string {
+  return `%${value.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+}
+
 // ------------------------------------------------------------------ filters
 
 type Where = { sql: string; params: SQLInputValue[] };
@@ -239,8 +244,9 @@ function requestWhere(f: MonitorFilters): Where {
   if (f.preset) add('r.preset = ?', f.preset);
   if (f.direction) add('COALESCE(r.direction, t.direction) = ?', f.direction);
   if (f.stage) add('r.stage = ?', f.stage);
-  if (f.model) add('r.model_tag = ?', f.model);
+  if (f.model) add(`r.model_tag LIKE ? ESCAPE '\\'`, likeContains(f.model));
   if (f.status) add('r.status = ?', f.status);
+  if (f.costBasis) add('r.cost_basis = ?', f.costBasis);
   if (f.scenarioId) add('t.scenario_id = ?', f.scenarioId);
   if (f.feature) add('r.feature = ?', f.feature);
   if (f.environment) add('t.environment = ?', f.environment);
@@ -263,9 +269,9 @@ function taskWhere(f: MonitorFilters): Where {
   if (f.preset) add('t.preset = ?', f.preset);
   if (f.direction) add('t.direction = ?', f.direction);
   if (f.scenarioId) add('t.scenario_id = ?', f.scenarioId);
-  if (f.status) add('t.status = ?', f.status);
+  if (f.taskStatus) add('t.status = ?', f.taskStatus);
   if (f.stage) add('EXISTS (SELECT 1 FROM ai_requests x WHERE x.task_id = t.task_id AND x.stage = ?)', f.stage);
-  if (f.model) add('EXISTS (SELECT 1 FROM ai_requests x WHERE x.task_id = t.task_id AND x.model_tag = ?)', f.model);
+  if (f.model) add(`EXISTS (SELECT 1 FROM ai_requests x WHERE x.task_id = t.task_id AND x.model_tag LIKE ? ESCAPE '\\')`, likeContains(f.model));
   if (f.feature) add('EXISTS (SELECT 1 FROM ai_requests x WHERE x.task_id = t.task_id AND x.feature = ?)', f.feature);
   if (f.environment) add('t.environment = ?', f.environment);
   if (f.networkType) add('t.network_type = ?', f.networkType);
@@ -858,6 +864,30 @@ export function vocabularyUsage(db: TelemetryDb, f: MonitorFilters): VocabularyU
   if (f.preset) {
     parts.push('preset = ?');
     params.push(f.preset);
+  }
+  if (f.direction) {
+    parts.push('direction = ?');
+    params.push(f.direction);
+  }
+  if (f.stage) {
+    parts.push('stage = ?');
+    params.push(f.stage);
+  }
+  if (f.model) {
+    parts.push(`model_tag LIKE ? ESCAPE '\\'`);
+    params.push(likeContains(f.model));
+  }
+  if (f.status) {
+    parts.push('status = ?');
+    params.push(f.status);
+  }
+  if (f.feature) {
+    parts.push('feature = ?');
+    params.push(f.feature);
+  }
+  if (f.costBasis) {
+    parts.push('cost_basis = ?');
+    params.push(f.costBasis);
   }
   const window = parts.length ? ` AND ${parts.join(' AND ')}` : '';
   const one = (feature: string, extra = '') => bucket(db.get<Row>(`${USAGE_SQL}${window}${extra}`, feature, ...params));

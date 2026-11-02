@@ -1,5 +1,5 @@
 // Provider contracts live in @kt/shared (the browser needs the same types).
-// Re-exported here to match the repository layout in docs/SYSTEM_DESIGN.md.
+// Re-exported here to match the repository layout in docs/01-系统设计.md.
 export type {
   AudioData,
   RequestMeta,

@@ -1,4 +1,4 @@
-// Mac-local provider (docs/SYSTEM_DESIGN.md 5.3): whisper.cpp ASR + Ollama LLM + macOS `say` TTS,
+// Mac-local provider (docs/01-系统设计.md 5.3): whisper.cpp ASR + Ollama LLM + macOS `say` TTS,
 // all behind the SAME three provider contracts as Mock and Cloud. All dialogue policy stays in the
 // ONE XState machine. There is deliberately NO fallback to any cloud service: if an engine is
 // missing or fails, the call fails with a LOCAL_*_UNAVAILABLE / LOCAL_*_ERROR code.

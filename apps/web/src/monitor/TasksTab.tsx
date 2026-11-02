@@ -178,7 +178,7 @@ function TaskDetailView({ taskId }: { taskId: string }) {
             <tr key={r.rid} className={r.status !== 'succeeded' ? 'row-bad' : ''}>
               <td>{r.stage}</td>
               <td>{fmtMs(r.durationMs)}</td>
-              <td>{r.status === 'succeeded' ? 'ok' : `${r.status}${r.errorCode ? ` · ${r.errorCode}` : ''}`}</td>
+              <td>{r.errorCode ? `${r.status} · ${r.errorCode}` : r.status}</td>
               <td>{costCell(r)}</td>
               <td className="mono">{r.retryOfRid ?? '—'}</td>
             </tr>

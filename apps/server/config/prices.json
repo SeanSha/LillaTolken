@@ -1,5 +1,5 @@
 {
-  "_comment": "Server-side price registry (docs/SYSTEM_DESIGN.md 6.4). Edit this file to change rates; it is read by the Node backend only and is never writable through the API. Rates are USD. Null/absent rate = cannot price (cost shows Unknown, never $0.00). Bump `revision` whenever you change a rate.",
+  "_comment": "Server-side price registry (docs/01-系统设计.md 6.4). Edit this file to change rates; it is read by the Node backend only and is never writable through the API. Rates are USD. Null/absent rate = cannot price (cost shows Unknown, never $0.00). Bump `revision` whenever you change a rate.",
   "revision": "2026-10-21-3",
   "effectiveDate": "2026-10-21",
   "sourceUrl": "https://developers.openai.com/api/docs/pricing",

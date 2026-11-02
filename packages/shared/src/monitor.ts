@@ -1,4 +1,4 @@
-// Types shared by the Node monitoring API and the /monitor dashboard (docs/SYSTEM_DESIGN.md 6).
+// Types shared by the Node monitoring API and the /monitor dashboard (docs/01-系统设计.md 6).
 // METADATA ONLY: none of these shapes can carry audio, transcripts, prompts or translations.
 import type { ResponseType } from './evaluation';
 import type { Direction, ProviderPreset } from './types';
@@ -267,9 +267,12 @@ export type MonitorFilters = {
   direction?: Direction;
   stage?: AiStage;
   model?: string;
-  status?: string;
+  status?: RequestStatus;
+  /** Task Explorer outcome. Separate from request `status`. */
+  taskStatus?: TaskStatus;
   scenarioId?: string;
   feature?: AiFeature;
+  costBasis?: CostBasis;
   environment?: EvalEnvironment;
   networkType?: EvalNetwork;
   noiseLevel?: EvalNoise;

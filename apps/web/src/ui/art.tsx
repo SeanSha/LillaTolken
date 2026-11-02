@@ -1,7 +1,7 @@
 // Vector art from the approved Figma Make design (design/figma-make): the mascot and the line icons.
 // Pure presentation; no behaviour lives here.
 
-export type IconName = 'mic' | 'stop' | 'sound' | 'plus' | 'replay' | 'retry' | 'camera' | 'cards';
+export type IconName = 'mic' | 'stop' | 'sound' | 'plus' | 'replay' | 'retry' | 'camera' | 'cards' | 'home';
 
 const ICON_PATHS: Record<IconName, React.ReactNode> = {
   mic: (
@@ -42,10 +42,59 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
       <path d="M4 5h12" />
     </>
   ),
+  home: (
+    <>
+      <path d="M4 11 12 4l8 7" />
+      <path d="M7 10.5V20h10v-9.5" />
+    </>
+  ),
 };
 
 /** Open-path icons are drawn as strokes only (filling an open path produces a blob). */
-const OUTLINE = new Set<IconName>(['plus', 'replay', 'retry', 'camera', 'cards']);
+const OUTLINE = new Set<IconName>(['plus', 'replay', 'retry', 'camera', 'cards', 'home']);
+
+/** Five-point star, tip up. `r` is the outer radius. */
+function starPoints(cx: number, cy: number, r: number): string {
+  const pts: string[] = [];
+  for (let i = 0; i < 5; i++) {
+    const outer = ((-90 + i * 72) * Math.PI) / 180;
+    const inner = outer + Math.PI / 5;
+    pts.push(`${cx + r * Math.cos(outer)},${cy + r * Math.sin(outer)}`);
+    pts.push(`${cx + r * 0.38 * Math.cos(inner)},${cy + r * 0.38 * Math.sin(inner)}`);
+  }
+  return pts.join(' ');
+}
+
+function Flag({ lang }: { lang: 'zh' | 'sv' }) {
+  return lang === 'zh' ? (
+    <svg viewBox="0 0 30 20">
+      <rect width="30" height="20" rx="2" fill="#DE2910" />
+      <polygon fill="#FFDE00" points={starPoints(5.5, 5.2, 2.7)} />
+      <polygon fill="#FFDE00" points={starPoints(10.2, 2.1, 1)} />
+      <polygon fill="#FFDE00" points={starPoints(12.2, 4.2, 1)} />
+      <polygon fill="#FFDE00" points={starPoints(12.2, 7.2, 1)} />
+      <polygon fill="#FFDE00" points={starPoints(10.2, 9.2, 1)} />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 32 22">
+      <rect width="32" height="22" rx="2" fill="#006AA7" />
+      <rect x="9" width="5" height="22" fill="#FECC00" />
+      <rect y="8.5" width="32" height="5" fill="#FECC00" />
+    </svg>
+  );
+}
+
+/** Source flag → target flag. `banner` is the large direction shown above the screen; the default fits a button. */
+export function LanguageMark({ from, size = 'button' }: { from: 'zh' | 'sv'; size?: 'button' | 'banner' }) {
+  const to = from === 'zh' ? 'sv' : 'zh';
+  return (
+    <span className={`lang-route${size === 'banner' ? ' lang-route--banner' : ''}`} aria-hidden="true">
+      <Flag lang={from} />
+      <span className="lang-route-arrow">→</span>
+      <Flag lang={to} />
+    </span>
+  );
+}
 
 export function Icon({ name }: { name: IconName }) {
   return (

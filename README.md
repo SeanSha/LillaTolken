@@ -10,7 +10,9 @@
 
 一次只做一件事。主按钮在屏幕下半部，靠图标、颜色和声音就能操作；中文和瑞典语写在一起，主要给旁边的成人看。
 
-下面是现在的界面。说话那几张来自内置的合成例子「我想去厕所」，不是真实录音。词卡上的苹果和杯子是画来展示界面的。
+下面是现在的界面（按当前代码重新截的）。说话那几张来自内置合成例子，不是真实录音。词卡上的苹果和杯子是画来展示界面的。
+
+**首页**
 
 <table>
   <tr>
@@ -19,32 +21,55 @@
       <b>选一个方向</b><br>
       说中文、说瑞典语，或拍照识字
     </td>
+  </tr>
+</table>
+
+**中文 → 瑞典语**（合成例子「我想去厕所」；意思不清时还会多一问）
+
+<table>
+  <tr>
     <td align="center" width="33%">
-      <img src="docs/screenshots/02-listening.png" alt="正在听：30 秒倒计时和停止按钮" width="220"><br>
-      <b>我在听</b><br>
-      说完这一小段就停
+      <img src="docs/screenshots/zh-sv/02-listening.png" alt="中文→瑞典语：正在听" width="220"><br>
+      <b>我在听</b>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/03-continue.png" alt="一段说完后，选择继续说或说完了" width="220"><br>
-      <b>还要说吗</b><br>
-      可以接着说，也可以说完
+      <img src="docs/screenshots/zh-sv/03-continue.png" alt="中文→瑞典语：继续或说完" width="220"><br>
+      <b>还要说吗</b>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/zh-sv/04-question.png" alt="中文→瑞典语：一个小问题" width="220"><br>
+      <b>一个小问题</b>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="docs/screenshots/04-question.png" alt="意思不清楚时，只问一个很短的问题" width="220"><br>
-      <b>一个小问题</b><br>
-      没听清时，只再问一句
+      <img src="docs/screenshots/zh-sv/05-confirm.png" alt="中文→瑞典语：确认意思" width="220"><br>
+      <b>先确认意思</b>
     </td>
     <td align="center">
-      <img src="docs/screenshots/05-confirm.png" alt="翻译前确认意思，对或不对" width="220"><br>
-      <b>先确认意思</b><br>
-      对了才翻译出去
+      <img src="docs/screenshots/zh-sv/06-result.png" alt="中文→瑞典语：翻译结果" width="220"><br>
+      <b>说给对方听</b>
     </td>
-    <td align="center">
-      <img src="docs/screenshots/06-result.png" alt="结果：中文意思和瑞典语句子，可以再听一遍" width="220"><br>
-      <b>说给对方听</b><br>
-      文字和声音一起给出
+  </tr>
+</table>
+
+**瑞典语 → 中文**（合成例子「Lägg boken på bordet.」；听懂后直接翻译，不问、不确认）
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/sv-zh/02-listening.png" alt="瑞典语→中文：正在听，按钮带英文" width="220"><br>
+      <b>我在听</b><br>
+      按钮带英文提示
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/sv-zh/03-continue.png" alt="瑞典语→中文：继续或说完" width="220"><br>
+      <b>还要说吗</b>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/sv-zh/06-result.png" alt="瑞典语→中文：瑞典语原文和中文" width="220"><br>
+      <b>中文结果</b><br>
+      原文 + 中文一起给出
     </td>
   </tr>
 </table>
@@ -135,7 +160,7 @@ flowchart TD
 
 手机用 Safari 打开同一套页面即可。云端模式会把录音送出这台电脑，不要让孩子用，也不要说个人信息。
 
-安装、手机访问、本机引擎和监控面板写在 [开发说明](docs/DEVELOPER_GUIDE.md)。
+安装、手机访问、本机引擎和监控面板写在 [02 开发说明](docs/02-开发说明.md)。
 
 ## 这版在意的几件事
 
@@ -147,8 +172,11 @@ flowchart TD
 
 ## 再往下看
 
-- [开发说明](docs/DEVELOPER_GUIDE.md)：怎么跑起来、怎么在手机上试、怎么看监控
-- [系统设计](docs/SYSTEM_DESIGN.md)：完整的产品与技术设计
+- [01 系统设计](docs/01-系统设计.md)：产品与技术的完整设计
+- [02 开发说明](docs/02-开发说明.md)：怎么跑起来、怎么在手机上试、怎么看监控
+- [03 界面设计需求](docs/03-界面设计需求.md)：屏幕、按钮，以及给设计工具的约束
+- [04 Tab5 迁移可行性](docs/04-Tab5迁移可行性.md)：能不能做到 Tab5 这块硬件上
+- [05 代码导读](docs/05-代码导读.md)：从代码看懂架构、每个文件和一次对话怎么走完
 
 ## 许可
 

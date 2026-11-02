@@ -9,6 +9,7 @@ import { screenOf, type Screen } from '../dialogue/selectors';
 import { rememberPreset, startingPreset } from '../services/presetPreference';
 import { settings } from '../services/settings';
 import { DevPanel } from './DevPanel';
+import { LanguageMark } from './art';
 import {
   AsrEmptyScreen,
   BusyScreen,
@@ -20,7 +21,6 @@ import {
   ResultScreen,
   SegmentDecisionScreen,
   SwitchScreen,
-  directionFlags,
 } from './screens';
 
 export function App() {
@@ -82,7 +82,6 @@ export function App() {
         )}
 
         <div className="route" aria-live="polite">
-          {task ? <span data-testid="direction-badge">{directionFlags(task.direction)}</span> : null}
           {snap.context.preset !== 'mock' && <span className="preset-chip">{snap.context.preset}</span>}
         </div>
 
@@ -104,6 +103,11 @@ export function App() {
       </header>
 
       <main className="main" data-state={JSON.stringify(snap.value)}>
+        {task && !feature && screen !== 'home' && screen !== 'switch' && (
+          <div className="direction-banner" data-testid="direction-badge">
+            <LanguageMark from={task.direction === 'ZH_TO_SV' ? 'zh' : 'sv'} size="banner" />
+          </div>
+        )}
         {screen === 'home' && !feature && <HomeScreen {...props} onPhotoCards={() => homeCameraRef.current?.click()} onMyCards={() => setFeature('library')} />}
         {screen === 'recording' && <RecordingScreen {...props} />}
         {screen === 'segmentDecision' && <SegmentDecisionScreen {...props} />}

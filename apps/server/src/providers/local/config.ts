@@ -1,4 +1,4 @@
-// Configuration of the Mac-local provider (docs/SYSTEM_DESIGN.md 5.3).
+// Configuration of the Mac-local provider (docs/01-系统设计.md 5.3).
 // Every engine is addressed on the loopback interface ONLY: local inference must never contact a
 // model vendor, and the engines' native ports must never be reachable from the LAN.
 import os from 'node:os';

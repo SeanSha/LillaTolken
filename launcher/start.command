@@ -13,6 +13,15 @@ OPEN_URL="https://localhost:5173${OPEN_PATH:-/}"   # monitor.command sets OPEN_P
 say_() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 listening() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 lan_ip() { ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null; }
+# The desktop app opens the translator and /monitor together. OPEN_PATH limits it to one page.
+open_pages() {
+  if [ -n "${OPEN_PATH:-}" ]; then
+    open "$OPEN_URL"
+    return
+  fi
+  open "https://localhost:5173/"
+  open "https://localhost:5173/monitor"
+}
 
 if ! command -v node >/dev/null; then
   say_ "找不到 node。请先安装:brew install node"; read -r "?按回车关闭"; exit 1
@@ -20,7 +29,7 @@ fi
 
 if listening 8787 || listening 5173; then
   say_ "程序已经在运行(端口 8787 / 5173 已被占用)。只打开浏览器。"
-  open "$OPEN_URL"
+  open_pages
   read -r "?按回车关闭此窗口(不会停止程序)"; exit 0
 fi
 
@@ -69,7 +78,7 @@ echo "  引擎状态:"; tail -n 4 "$LOGS/local-start.log" | sed 's/^/    /'
 echo
 echo "  日志: $LOGS"
 echo "  在此窗口按 q 然后回车,即可停止全部程序(也可以直接关闭窗口)。"
-open "$OPEN_URL"
+open_pages
 
 # q + Enter stops everything. The loop (not `read`) owns the wait, so the EXIT trap still fires
 # when the window is closed.

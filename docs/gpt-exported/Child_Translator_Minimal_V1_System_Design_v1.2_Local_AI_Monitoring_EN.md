@@ -580,7 +580,7 @@ Do not assume `npm run local:start` can safely install dependencies, silently do
 ## 10. Cursor Agent prompt — implement the entire update
 
 ```text
-Read docs/SYSTEM_DESIGN.md completely. This is v1.2 of an EXISTING,
+Read docs/01-系统设计.md completely. This is v1.2 of an EXISTING,
 working Child Translator. Adult speech is already working via the Cloud API.
 
 Your task is to EXTEND the existing codebase (do not rewrite the React UI,

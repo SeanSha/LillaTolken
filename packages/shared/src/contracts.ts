@@ -1,4 +1,4 @@
-// Provider contracts (docs/SYSTEM_DESIGN.md section 5).
+// Provider contracts (docs/01-系统设计.md section 5).
 // ASR, LLM and TTS are three independent interfaces so hybrid setups stay possible.
 import type { Direction, DialogueInput, Language, LastDelivered } from './types';
 
@@ -15,7 +15,7 @@ export type AudioData = {
 
 /**
  * Metadata-only usage/timing numbers an adapter can report for ONE invocation
- * (docs/SYSTEM_DESIGN.md 6.2 / 6.4). Never put content here.
+ * (docs/01-系统设计.md 6.2 / 6.4). Never put content here.
  * Durations are milliseconds (Ollama's nanoseconds are converted by the adapter).
  */
 export type NormalizedUsage = {

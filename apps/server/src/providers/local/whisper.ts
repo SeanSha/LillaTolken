@@ -1,4 +1,4 @@
-// Local ASR: whisper.cpp HTTP server on 127.0.0.1 (docs/SYSTEM_DESIGN.md 5.3).
+// Local ASR: whisper.cpp HTTP server on 127.0.0.1 (docs/01-系统设计.md 5.3).
 //  1. The browser blob (iPhone Safari: AAC in MP4/M4A; Chromium: WebM/Opus) is converted LOCALLY by
 //     ffmpeg to 16 kHz mono PCM WAV in a request-scoped temp dir that is always deleted.
 //  2. POST /inference (multipart) with an explicit language. ASR never translates.
