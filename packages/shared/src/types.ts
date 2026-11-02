@@ -1,5 +1,5 @@
 // Core vocabulary shared by the browser (dialogue manager) and the Node backend.
-// Mirrors section 4.4 and 5 of docs/01-系统设计.md.
+// Mirrors section 4.4 and 5 of docs/02-en/01-system-design.md.
 
 export type Direction = 'ZH_TO_SV' | 'SV_TO_ZH';
 export type InputPurpose = 'INITIAL' | 'CLARIFICATION' | 'CORRECTION';

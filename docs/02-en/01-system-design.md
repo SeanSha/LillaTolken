@@ -1,6 +1,8 @@
-# 01 系统设计
+# 01 System design
 
-本系列：**01 系统设计** · [02 开发说明](02-开发说明.md) · [03 界面设计需求](03-界面设计需求.md) · [04 Tab5 迁移可行性](04-Tab5迁移可行性.md) · [05 代码导读](05-代码导读.md)
+Series: **01 System design** · [02 Developer guide](02-developer-guide.md) · [03 UI brief](03-ui-brief.md) · [04 Tab5 feasibility](04-tab5-feasibility.md) · [05 Code guide](05-code-guide.md) · [06 Research prompts](06-research-prompts.md)
+
+The Chinese file is in [`docs/01-zh`](../01-zh/01-系统设计.md).
 
 **Child-Friendly Chinese–Swedish Speech Translator.** Minimal V1 System Design — Provider-Independent Cursor Handoff.
 
@@ -658,7 +660,7 @@ Do not assume `npm run local:start` can safely install dependencies, silently do
 ## 10. Cursor Agent prompt — implement the entire update
 
 ```text
-Read docs/01-系统设计.md completely. This is v1.2 of an EXISTING,
+Read docs/02-en/01-system-design.md completely. This is v1.2 of an EXISTING,
 working Child Translator. Adult speech is already working via the Cloud API.
 
 Your task is to EXTEND the existing codebase (do not rewrite the React UI,

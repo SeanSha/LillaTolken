@@ -1,4 +1,4 @@
-// Protected monitoring API (docs/01-系统设计.md 5.4). Every route except login/logout/session
+// Protected monitoring API (docs/02-en/01-system-design.md 5.4). Every route except login/logout/session
 // requires the admin cookie - including exports, pricing and local health.
 import express, { type NextFunction, type Request, type Response, Router } from 'express';
 import { z } from 'zod';

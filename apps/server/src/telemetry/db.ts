@@ -1,4 +1,4 @@
-// SQLite telemetry store (docs/01-系统设计.md 6.3). METADATA ONLY.
+// SQLite telemetry store (docs/02-en/01-system-design.md 6.3). METADATA ONLY.
 // There is deliberately NO column that can hold audio, transcripts, prompts or translations.
 // Uses Node's built-in `node:sqlite` (Node >= 22.13): no native add-on to compile.
 import fs from 'node:fs';

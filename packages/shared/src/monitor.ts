@@ -1,4 +1,4 @@
-// Types shared by the Node monitoring API and the /monitor dashboard (docs/01-系统设计.md 6).
+// Types shared by the Node monitoring API and the /monitor dashboard (docs/02-en/01-system-design.md 6).
 // METADATA ONLY: none of these shapes can carry audio, transcripts, prompts or translations.
 import type { ResponseType } from './evaluation';
 import type { Direction, ProviderPreset } from './types';

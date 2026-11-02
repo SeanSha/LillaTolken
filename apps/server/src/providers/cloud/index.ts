@@ -1,4 +1,4 @@
-// OpenAI Cloud provider (docs/01-系统设计.md 5.2): ASR + structured LLM + TTS.
+// OpenAI Cloud provider (docs/02-en/01-system-design.md 5.2): ASR + structured LLM + TTS.
 // Credentials stay server-side. Adult voices and non-identifying/synthetic input only.
 // Nothing here writes audio, transcripts or prompts to disk or to logs.
 import OpenAI, { toFile } from 'openai';

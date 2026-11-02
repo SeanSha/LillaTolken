@@ -1,4 +1,4 @@
-// Local TTS: macOS `say` (docs/01-系统设计.md 5.3). Voices are DISCOVERED at runtime
+// Local TTS: macOS `say` (docs/02-en/01-system-design.md 5.3). Voices are DISCOVERED at runtime
 // (`say -v '?'`), never hardcoded. The binary is invoked with an argument array (no shell) and the
 // text goes through a private temp file, so user text can never be parsed as options or by a shell.
 // Output is 16-bit PCM WAV, which iPhone Safari plays natively. There is NO cloud fallback.

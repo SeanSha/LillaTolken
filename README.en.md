@@ -160,7 +160,7 @@ In the on-Mac mode, identifying the photo also stays on this computer. Cloud mod
 
 The same page opens in Safari on a phone. Cloud mode sends recordings off this computer. Do not use it with children, and do not say personal information.
 
-Setup, phone access, the on-Mac engines, and the monitoring panel are in [02 Developer guide](docs/02-开发说明.md) (Chinese).
+Setup, phone access, the on-Mac engines, and the monitoring panel are in the [02 Developer guide](docs/02-en/02-developer-guide.md).
 
 ## What this version cares about
 
@@ -172,11 +172,14 @@ Setup, phone access, the on-Mac engines, and the monitoring panel are in [02 Dev
 
 ## Read on
 
-- [01 System design](docs/01-系统设计.md): the full product and technical design
-- [02 Developer guide](docs/02-开发说明.md) (Chinese): how to run it, try it on a phone, and open monitoring
-- [03 UI design brief](docs/03-界面设计需求.md) (Chinese): screens, buttons, and constraints for a design tool
-- [04 Tab5 feasibility](docs/04-Tab5迁移可行性.md) (Chinese): whether this can move onto Tab5 hardware
-- [05 Code guide](docs/05-代码导读.md) (Chinese): the architecture, what each file does, and how one turn runs
+Chinese is in [`docs/01-zh`](docs/01-zh/01-系统设计.md), with Chinese filenames. English is in [`docs/02-en`](docs/02-en/01-system-design.md), with English filenames. The numbers match. The links below go to English.
+
+- [01 System design](docs/02-en/01-system-design.md): the full product and technical design
+- [02 Developer guide](docs/02-en/02-developer-guide.md): how to run it, try it on a phone, and open monitoring
+- [03 UI brief](docs/02-en/03-ui-brief.md): screens, buttons, and constraints for a design tool
+- [04 Tab5 feasibility](docs/02-en/04-tab5-feasibility.md): whether this can move onto Tab5 hardware
+- [05 Code guide](docs/02-en/05-code-guide.md): the architecture, what each file does, and how one turn runs
+- [06 Research prompts](docs/02-en/06-research-prompts.md): the prompts and output schemas used in the paper
 
 ## License
 

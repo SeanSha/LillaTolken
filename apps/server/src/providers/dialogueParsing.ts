@@ -1,4 +1,4 @@
-// Provider-independent validation of LLM output (docs/01-系统设计.md 5: "Validate JSON and
+// Provider-independent validation of LLM output (docs/02-en/01-system-design.md 5: "Validate JSON and
 // schema from any LLM before dispatching XState events"). Cloud and Local share this code so the
 // SAME Zod schema and the SAME server-side policy cap apply to every model.
 import {

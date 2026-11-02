@@ -1,4 +1,4 @@
-// Pricing + cost aggregation (docs/01-系统设计.md 6.4; acceptance M02/M03/M04).
+// Pricing + cost aggregation (docs/02-en/01-system-design.md 6.4; acceptance M02/M03/M04).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

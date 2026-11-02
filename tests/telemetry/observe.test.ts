@@ -1,5 +1,5 @@
 // The ONE telemetry wrapper: one row per invocation, around success, exceptions, cancel and timeout
-// (docs/01-系统设计.md 6.4; acceptance M05/M08).
+// (docs/02-en/01-system-design.md 6.4; acceptance M05/M08).
 import { describe, expect, it, vi } from 'vitest';
 import { AppError, type AiStage, type ProviderBundle, type RequestMeta } from '@kt/shared';
 import { observeBundle, inferDirection } from '../../apps/server/src/telemetry/observe';

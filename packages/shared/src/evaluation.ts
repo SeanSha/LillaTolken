@@ -1,4 +1,4 @@
-// Metadata-only evaluation events (docs/01-系统设计.md section 6).
+// Metadata-only evaluation events (docs/02-en/01-system-design.md section 6).
 // NEVER add fields that can carry audio, transcripts, translations, prompts or lastDelivered content.
 import { z } from 'zod';
 import { DirectionSchema, PresetSchema } from './schemas';

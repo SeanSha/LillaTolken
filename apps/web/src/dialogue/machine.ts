@@ -1,4 +1,4 @@
-// ONE dialogue Statechart for every provider preset (docs/01-系统设计.md section 4).
+// ONE dialogue Statechart for every provider preset (docs/02-en/01-system-design.md section 4).
 // The machine owns all decisions: counters, mandatory confirmation, switching, memory.
 // Providers only return structured proposals / translations that are validated first.
 import { assign, fromPromise, setup } from 'xstate';

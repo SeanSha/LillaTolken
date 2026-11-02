@@ -1,4 +1,4 @@
-// The ONE server-side telemetry wrapper (docs/01-系统设计.md 6.4).
+// The ONE server-side telemetry wrapper (docs/02-en/01-system-design.md 6.4).
 // Every provider path (mock / cloud / local) goes through it, so exactly ONE row is written per
 // real backend model invocation - including failures, cancellations and retries.
 // It never stores prompts, transcripts, translations, audio or raw error bodies, and a telemetry

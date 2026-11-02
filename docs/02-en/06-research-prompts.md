@@ -1,4 +1,8 @@
-# Research prompt and structured-output reference
+# 06 Research prompts
+
+Series: [01 System design](01-system-design.md) · [02 Developer guide](02-developer-guide.md) · [03 UI brief](03-ui-brief.md) · [04 Tab5 feasibility](04-tab5-feasibility.md) · [05 Code guide](05-code-guide.md) · **06 Research prompts**
+
+The Chinese file is in [`docs/01-zh`](../01-zh/06-研究提示词.md).
 
 This note accompanies the exploratory evaluation described in
 *Design and Evaluation of a Dialogue-Based Speech Translator for Children: An Empirical Study*.
@@ -10,7 +14,7 @@ is available directly as the source file below, instead of being duplicated
 in the paper:
 
 - **[Prompt revision p3 — pinned source at commit `107a3d7`](https://github.com/SeanSha/LillaTolken/blob/107a3d7/apps/server/src/providers/cloud/prompts.ts)**
-- [Current implementation (may change)](../apps/server/src/providers/cloud/prompts.ts)
+- [Current implementation (may change)](../../apps/server/src/providers/cloud/prompts.ts)
 
 The pinned source includes:
 - Chinese speech interpretation: `INTERPRET_SYSTEM_PROMPT`

@@ -1,4 +1,4 @@
-// SQLite schema migrations + event folding (docs/01-系统设计.md 6.3).
+// SQLite schema migrations + event folding (docs/02-en/01-system-design.md 6.3).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

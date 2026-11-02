@@ -1,5 +1,5 @@
 // ~20 ARTIFICIAL, non-identifying scenarios for the text-only Cloud-vs-Local feasibility run
-// (docs/01-系统设计.md 7.3): 5 clear zh->sv, 10 fragmented/ambiguous zh, 5 sv->zh.
+// (docs/02-en/01-system-design.md 7.3): 5 clear zh->sv, 10 fragmented/ambiguous zh, 5 sv->zh.
 // Nothing here is real child speech or personal data.
 export type ZhScenario = {
   id: string;
