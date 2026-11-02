@@ -5,12 +5,9 @@
 整个文件只有一个函数。确认之前，把模型提出的中文意思说成一句问话。
 
 ```text
-线索：confirmationPrompt
-function 确认句(提出的意思) {
-  线索：meaning.trim().replace(句尾标点)
-  去掉句尾的句号、问号和空格
-  线索：`你是说：${...}，对吗？`
-  return 「你是说：」加上这句意思，再加上「，对吗？」
+confirmationPrompt(meaning) {
+  meaning.trim().replace(句尾的句号、问号和空格)
+  return `你是说：${meaning}，对吗？`
 }
 ```
 

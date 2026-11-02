@@ -23,17 +23,13 @@ X-Request-Id
 客户端断开时，这里 abort 正在进行的上游调用。所以孩子点取消后，服务器不必把这次识别做完。
 
 ```text
-线索：function context
-预设 = 请求头里的预设，没有就当 mock
-  线索：x-provider-preset ?? 'mock'
-if (判定预设名字不认识) 直接拒绝
-  线索：PresetSchema.safeParse 失败 → BAD_REQUEST
-if (判定这套现在不可用，并且它不是 local) 拒绝
-  线索：!available && preset !== 'local' → NOT_CONFIGURED
-if (判定任务编号或请求编号不合格) 直接拒绝
-  线索：!ID_RE.test(taskId)
-孩子取消时，停掉这次模型调用
-  线索：AbortController ，req.on('aborted')
+context(req) {
+  预设 = x-provider-preset，没有就当 'mock'
+  PresetSchema.safeParse 失败 → BAD_REQUEST
+  !available && preset !== 'local' → NOT_CONFIGURED
+  !ID_RE.test(taskId) 或 requestId → BAD_REQUEST
+  req.on('aborted') 时 AbortController.abort()
+}
 ```
 
 ## 翻译相关路由
@@ -50,27 +46,23 @@ if (判定任务编号或请求编号不合格) 直接拒绝
 这些路由没有登录。
 
 ```text
-线索：app.post('/api/asr')
-读出该用哪一套
-  线索：context(req)
-if (判定语言不是中文或瑞典语) 拒绝
-  线索：LanguageSchema
-if (判定头里带了剧本文字) 交给假识别
-  线索：x-mock-transcript
-调用这一套的识别
-  线索：bundle.asr.transcribe
-返回文字
-  线索：res.json({ text })
+app.post('/api/asr') {
+  context(req) 选出这一套
+  LanguageSchema 不是 zh 或 sv → 拒绝
+  头里有 x-mock-transcript 就交给假识别
+  bundle.asr.transcribe
+  res.json({ text })
+}
 
-线索：app.post('/api/interpret')
-if (判定没有打开「记住上一句」) 丢掉上一句
-  线索：config.promptMemory ? previousDelivered : null
-调用理解
-  线索：bundle.dialogue.interpretChinese
+app.post('/api/interpret') {
+  promptMemory 关着时 previousDelivered = null
+  bundle.dialogue.interpretChinese
+}
 
-线索：app.post('/api/translate')
-调用翻译，返回译文
-  线索：bundle.dialogue.translate ，res.json({ translation })
+app.post('/api/translate') {
+  bundle.dialogue.translate
+  res.json({ translation })
+}
 ```
 
 ## 词卡和评估

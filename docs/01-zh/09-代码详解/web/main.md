@@ -15,17 +15,14 @@
 这里不用 React 的 StrictMode。状态机要管麦克风，同一段副作用只能跑一次。
 
 ```text
-线索：async function start
-if (判定打开的网页地址尾部是否有 /monitor 或者 /monitor/) {
-  线索：pathname === '/monitor' 或 startsWith('/monitor/')
-  只加载监控页和监控样式
-    线索：import('./monitor/MonitorApp')
-  return
+async function start() {
+  if (pathname === '/monitor' 或 pathname.startsWith('/monitor/')) {
+    import('./monitor/MonitorApp')，显示监控登录
+    return
+  }
+  import('./ui/App') 和 styles.css
+  render(<App />)，这里没有 StrictMode
 }
-加载儿童界面和儿童样式
-  线索：import('./ui/App')
-显示儿童界面
-  线索：render(<App />)，这里没有 StrictMode
 ```
 
-外形仍是原来的 `if` 和 `return`。括号里是这一步在判定什么。「线索」是源码里能搜到的那一小段，不是整行代码。
+外形仍是原来的 `if` 和 `return`。名字就写在句子里，方便在 `main.tsx` 里搜。

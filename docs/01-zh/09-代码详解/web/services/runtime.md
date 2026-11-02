@@ -27,26 +27,16 @@
 `prepare()` 会在短句快说完时提前打开真麦克风。mock 且不是真麦克风时，这个函数什么也不做。
 
 ```text
-线索：RecorderFacade.choose
-if (判定当前预设不是 mock) {
-  线索：activePreset !== 'mock'
-  return 真麦克风
-    线索：MediaRecorderRecorder
+RecorderFacade.choose() {
+  if (activePreset !== 'mock') return MediaRecorderRecorder
+  if (micMode === 'real') return ScriptedRecorder(mockScript, 真麦克风)
+  return ScriptedRecorder(mockScript)
 }
-if (判定成人把麦克风设成了真的) {
-  线索：micMode === 'real'
-  return 用真麦克风录音，交出去的文字仍是剧本
-    线索：new ScriptedRecorder(mockScript, this.real)
-}
-return 剧本麦克风
-  线索：new ScriptedRecorder(mockScript)
 
-线索：prepare
-if (判定是 mock，并且没有要求真麦克风) {
-  线索：activePreset === 'mock' && micMode !== 'real'
-  return 什么也不做
+prepare() {
+  if (activePreset === 'mock' && micMode !== 'real') return
+  打开真麦克风
 }
-打开真麦克风
 ```
 
 ## `dialogueMachine`
@@ -54,14 +44,10 @@ if (判定是 mock，并且没有要求真麦克风) {
 文件末尾调用 `createDialogueMachine`。新任务开始时记住预设，并把剧本倒回第一句。所以每次新任务，T01 都从「我想去厕所。」重新来。
 
 ```text
-线索：createDialogueMachine({ ... })
-交进去：providers、recorder、audioStore、speakPrompt、stopPlayback、log
-新的一轮开始时 {
-  线索：onTaskStarted
-  记住这一轮的预设
-    线索：setActivePreset(preset)
-  把剧本倒回第一句
-    线索：mockScript.reset()
+createDialogueMachine 交进 providers、recorder、audioStore、speakPrompt、stopPlayback、log
+onTaskStarted {
+  setActivePreset(preset)
+  mockScript.reset() 把剧本倒回第一句
 }
 ```
 

@@ -2,9 +2,7 @@
 
 源码：[App.tsx](../../../../../apps/web/src/ui/App.tsx)
 
-这是儿童界面的总壳。它启动状态机，决定画哪一屏，也负责从首页走进词卡。
-
-每一段里的「线索」是 `App.tsx` 里能直接搜索的名字或判断，用来对上位置。中文仍是这一步在做什么。
+这是儿童界面的总壳。它启动状态机，决定画哪一屏，也负责从首页走进词卡。名字写在中文句子里，方便对着 `App.tsx` 搜。
 
 ## 启动状态机
 
@@ -13,17 +11,11 @@
 `presetAtStart` 来自地址栏的 `?preset=`，否则用这台设备上次记住的预设。网址里是 `cloud`、大人还没确认过时，齿轮直接打开。
 
 ```text
-启动时 {
-  线索：startingPreset
-  预设 = 地址栏里的预设，没有就用这台设备上次记住的
-  线索：useActor(dialogueMachine)
-  启动状态机，把这个预设交进去
-  线索：screenOf(snap)
-  屏幕名 = 把状态机现在的状态翻译成首页、录音、确认这类名字
-  if (判定地址栏要 cloud，并且大人还没确认过) {
-    线索：requested === 'cloud' && !cloudAcknowledged
-    直接打开齿轮
-  }
+预设 presetAtStart = 地址栏里的预设，没有就用这台设备上次记住的 startingPreset
+useActor(dialogueMachine) 启动状态机，把 presetAtStart 交进去，得到 snap 和 send
+屏幕名 screen = screenOf(snap)，把状态翻译成首页、录音、确认
+if (地址栏 requested === 'cloud'，并且还没有 cloudAcknowledged) {
+  setDevOpen(true) 直接打开齿轮
 }
 ```
 
@@ -36,21 +28,17 @@
 左上角返回把 `feature` 设回 `null`，对话首页又出现。
 
 ```text
-线索：feature ，一开始是 null
+feature 一开始是 null，后来可以是 'photo' 或 'library'
 
-点词卡里的返回 {
-  线索：setOpeningFile(null) ；setFeature(null)
-  清掉刚选的照片
-  词卡开关关掉
+点词卡返回 {
+  setOpeningFile(null)
+  setFeature(null) 回到对话首页
 }
 
 首页相机选中一张图 {
-  if (判定没有选到文件) {
-    线索：if (!file) return
-    return
-  }
-  线索：setOpeningFile(file) ；setFeature('photo')
-  记下这张照片，进入拍照
+  if (!file) return
+  setOpeningFile(file)
+  setFeature('photo') 进入拍照
 }
 ```
 
@@ -59,15 +47,11 @@
 任务进行中、并且这一轮还没送达时，左边是取消，右边可以换方向。齿轮打开 `DevPanel`，那是给成人的，不参与儿童流程。
 
 ```text
-if (判定这一轮还在进行，并且还没把译文送出) {
-  线索：showTaskControls
-  左边按钮：告诉状态机取消
-    线索：send({ type: 'CANCEL' })
-  右边按钮：告诉状态机想换成另一个方向
-    线索：SWITCH_REQUESTED ，otherDirection
+if (showTaskControls：这一轮还在进行，并且结果还没 delivered) {
+  左边 send({ type: 'CANCEL' })
+  右边 send({ type: 'SWITCH_REQUESTED', direction: otherDirection(...) })
 }
-齿轮：打开成人设置
-  线索：setDevOpen(true)
+齿轮 setDevOpen(true) 打开 DevPanel
 ```
 
 ## 选择屏幕
@@ -75,28 +59,16 @@ if (判定这一轮还在进行，并且还没把译文送出) {
 `feature` 为空时，按 `screen` 渲染对应的一屏。每个屏幕都收到 `snap` 和 `send`。它们不修改任务计数。`feature` 有值时，词卡盖在上面。
 
 ```text
-if (判定是首页，并且没在看词卡) 画首页
-  线索：screen === 'home' && !feature → HomeScreen
-if (判定正在录音) 画录音屏
-  线索：screen === 'recording' → RecordingScreen
-if (判定在问继续还是说完) 画这一屏
-  线索：screen === 'segmentDecision'
-if (判定正在等识别、理解、翻译或语音) 画忙碌屏
-  线索：screen === 'busy'
-if (判定在问一个短问题) 画提问屏
-  线索：screen === 'clarify' → QuestionScreen kind="clarify"
-if (判定在等孩子点是或不是) 画确认屏
-  线索：screen === 'confirm' → QuestionScreen kind="confirm"
-if (判定译文已经准备好) 画结果屏
-  线索：screen === 'result'
-if (判定在问要不要换方向) 画换方向屏
-  线索：screen === 'switch'
-if (判定这一步失败了还能重试) 画错误屏
-  线索：screen === 'error'
-if (判定问到头或听空太多次) 画兜底屏
-  线索：screen === 'fallback'
-if (判定没听清，并且没在看词卡) 画再录一次
-  线索：screen === 'asrEmpty' && !feature
-if (判定词卡开关开着) 改画词卡，对话屏先让开
-  线索：feature && VocabularyShell
+if (screen === 'home' && !feature) 画 HomeScreen
+if (screen === 'recording') 画 RecordingScreen
+if (screen === 'segmentDecision') 画「继续说 / 说完了」
+if (screen === 'busy') 画忙碌屏
+if (screen === 'clarify') 画 QuestionScreen，kind 是 clarify
+if (screen === 'confirm') 画 QuestionScreen，kind 是 confirm
+if (screen === 'result') 画 ResultScreen
+if (screen === 'switch') 画 SwitchScreen
+if (screen === 'error') 画 ErrorScreen
+if (screen === 'fallback') 画 FallbackScreen
+if (screen === 'asrEmpty' && !feature) 画再录一次
+if (feature) 画 VocabularyShell，对话屏先让开
 ```
