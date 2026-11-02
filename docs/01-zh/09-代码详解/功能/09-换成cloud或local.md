@@ -2,6 +2,48 @@
 
 例子：同一句「我想去厕所。」，先用 mock 走完，再把预设换成 local 走一遍。孩子点的仍是「中文 → Svenska」「说完了」「是」。屏幕顺序不变。
 
+怎么读：先看这份 JSON，它和第一篇点「是」之前那份是同一个形状，变的是 `preset`。然后看调用顺序图里服务器换成哪一套函数，最后读下面三节。
+
+## 这一刻的状态机
+
+这一轮开始时，`preset` 已经抄进 `task.preset`。下面是 local 走到确认屏、还没点「是」。字段形状和 mock 那一遍相同。提出的意思这里沿用「我想去厕所。」作示意，本机模型实际返回的句子以那一次为准。
+
+```json
+{
+  "value": { "task": { "confirming": "asking" } },
+  "context": {
+    "sessionId": "session-1",
+    "preset": "local",
+    "task": {
+      "id": "task-local",
+      "direction": "ZH_TO_SV",
+      "preset": "local",
+      "inputPurpose": "INITIAL",
+      "segmentInfo": [{ "id": "seg-1", "durationMs": 1800, "purpose": "INITIAL" }],
+      "pendingSegments": 0,
+      "dialogueInputs": [{ "purpose": "INITIAL", "textParts": ["我想去厕所。"] }],
+      "proposedMeaning": "我想去厕所。",
+      "currentQuestion": null,
+      "confirmedMeaning": null,
+      "sourceText": null,
+      "translatedText": null,
+      "clarificationCount": 0,
+      "correctionCount": 0,
+      "asrRetryCount": 0,
+      "startedAt": 0
+    },
+    "lastDelivered": null,
+    "pendingDirection": null,
+    "safeReturnState": null,
+    "activeRequestId": "req-confirm",
+    "error": null,
+    "fallbackReason": null,
+    "audioStatus": "ready",
+    "segmentStartedAt": null
+  }
+}
+```
+
 状态机调用的仍是 `transcribe`、`interpret`、`translate`、`synthesize`。`context()` 按 `X-Provider-Preset` 换成下面三套里的一套，再由 `observe` 包住。
 
 ```mermaid

@@ -6,9 +6,13 @@
 
 例子贯穿全文：孩子要表达「我想去厕所。」方向是中文到瑞典语。
 
-## 两张图怎么读
+## 这一页怎么读
 
-这一轮要记住的字段都在 `MachineContext` 里，类型在 [types.ts](types.md)。改这些字段的是下面的 `assign`：`beginTask`、`newRequestId`、`deliveredMemory`，以及各阶段 `onDone` 里的 `patchTask`。录音字节在 `audioStore`，不进这份记录。
+按这个顺序读。第 1 节是 `App.tsx` 一直握着的那份 JSON。第 2 节是「我想去厕所。」这一遍谁调用谁。第 3 节是哪个事件改了哪些字段。第 4 节起按阶段对照源码，顺序和主路一致，岔路放在主路各阶段后面。
+
+## 1. 这份数据长什么样
+
+这一轮要记住的字段都在 `MachineContext` 里，类型在 [types.ts](types.md)。改这些字段的是 `assign`：`beginTask`、`newRequestId`、`deliveredMemory`，以及各阶段 `onDone` 里的 `patchTask`。录音字节在 `audioStore`，不进这份记录。
 
 `App.tsx` 的 `useActor` 一直握着一份 `snap`。它就是下面这种 JSON：`value` 是现在停在哪一步，`context` 是记下的字段。三份例子是同一台机器的三个时刻，编号只是示意。
 
@@ -97,11 +101,9 @@
 }
 ```
 
-这里用两种图。
+## 2. 这一遍谁调用谁
 
 调用顺序图看时间。竖着往下是「我想去厕所。」点「是」的那一遍。实线是调用，格子里的名字能在源码里搜到。界面把事件送进来，状态机先改 context，再调用 `speakPrompt`、`startRecording`、`stopRecording`、`transcribe`、`interpret`、`translate`、`synthesize`。这些名字写在 `actors` 里，由 `src` 指过去，然后再去调 [runtime.ts](../services/runtime.md)。完整的 HTTP 函数链在 [说中文，翻成瑞典语](../../功能/01-说中文翻成瑞典语.md)。
-
-状态图看阶段。框里的字是这个阶段写下或拿着的 context。箭头写成「事件 / 进入哪里」：斜杠前面是触发这次改变的事件，或上面这些函数返回之后，箭头指向的框就是结果。`isStale` 对不上时停在原地，不改 `task`。
 
 ```mermaid
 sequenceDiagram
@@ -134,6 +136,10 @@ sequenceDiagram
   UI->>M: DELIVERY_FINISHED，mode 为 audio
   M->>M: deliveredMemory 写入 lastDelivered
 ```
+
+## 3. 哪个事件改了哪些字段
+
+状态图看阶段。框里的字是这个阶段写下或拿着的 context。箭头写成「事件 / 进入哪里」：斜杠前面是触发这次改变的事件，或上面这些函数返回之后，箭头指向的框就是结果。`isStale` 对不上时停在原地，不改 `task`。第一张是主路，第二张是岔路。
 
 ```mermaid
 stateDiagram-v2
@@ -192,6 +198,8 @@ stateDiagram-v2
 ```
 
 任务进行中的 `CANCEL` 回到 `idle`，不写 `lastDelivered`。`segmentDecision`、`transcribing`、`interpreting`、`clarifying`、`confirming`、`translating`、`result`、`asrEmpty`、`recoverableError`、`fallback` 收到 `SWITCH_REQUESTED` 时，和录音中一样进入 `confirmingSwitch`，`safeReturnState` 记下离开的那一步。`SWITCH_NO` 时，如果离开点是 `recording` 而且 `pendingSegments` 还是 0，没有段可以决定，就重新 `startRecording`。
+
+## 4. 按阶段对照源码
 
 ## 文件开头：依赖和过期结果
 
