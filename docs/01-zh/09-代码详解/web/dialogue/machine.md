@@ -6,6 +6,106 @@
 
 例子贯穿全文：孩子要表达「我想去厕所。」方向是中文到瑞典语。
 
+## 两张图怎么读
+
+这一轮要记住的字段都在 `MachineContext` 里，类型在 [types.ts](types.md)。改这些字段的是下面的 `assign`：`beginTask`、`newRequestId`、`deliveredMemory`，以及各阶段 `onDone` 里的 `patchTask`。录音字节在 `audioStore`，不进这份记录。
+
+这里用两种图。
+
+调用顺序图看时间。竖着往下是「我想去厕所。」点「是」的那一遍。实线是调用，格子里的名字能在源码里搜到。界面把事件送进来，状态机先改 context，再调用演员。演员是 `speakPrompt`、`startRecording`、`stopRecording`、`transcribe`、`interpret`、`translate`、`synthesize`。它们再去调 [runtime.ts](../services/runtime.md)。完整的 HTTP 函数链在 [说中文，翻成瑞典语](../../功能/01-说中文翻成瑞典语.md)。
+
+状态图看阶段。框里的字是这个阶段写下或拿着的 context。箭头写成「事件 / 进入哪里」：斜杠前面是触发这次改变的事件或演员结果，箭头指向的框就是结果。`isStale` 对不上时停在原地，不改 `task`。
+
+```mermaid
+sequenceDiagram
+  participant UI as screens.tsx
+  participant M as machine.ts
+  participant RT as runtime.ts
+
+  UI->>M: START_TASK，方向 ZH_TO_SV
+  M->>M: beginTask 写入 task，三个计数为 0，preset 抄进 task.preset
+  M->>RT: 演员 speakPrompt 调用 prompts.speak
+  M->>RT: 演员 startRecording 调用 RecorderFacade.start
+  UI->>M: STOP_SEGMENT
+  M->>RT: 演员 stopRecording
+  M->>M: pendingSegments 加 1，segmentInfo 追加一条
+  UI->>M: FINISH_INPUT
+  M->>M: 进入 transcribing 时 newRequestId，换掉 activeRequestId
+  M->>RT: 演员 transcribe
+  RT-->>M: texts
+  M->>M: dialogueInputs 追加，pendingSegments 归 0
+  M->>RT: 演员 interpret
+  RT-->>M: PROPOSE_MEANING
+  M->>M: 写入 proposedMeaning，currentQuestion 清空
+  M->>RT: 演员 synthesize，synthInput confirmation
+  UI->>M: CONFIRM_YES
+  M->>M: confirmedMeaning 抄自 proposedMeaning
+  M->>RT: 演员 translate，文本是 confirmedMeaning
+  RT-->>M: 写入 translatedText
+  Note over M: 这时还没有 lastDelivered
+  M->>RT: 演员 synthesize，synthInput result
+  UI->>M: DELIVERY_FINISHED，mode 为 audio
+  M->>M: deliveredMemory 写入 lastDelivered
+```
+
+```mermaid
+stateDiagram-v2
+  idle: 进入时清空 task。lastDelivered 保留。SET_PRESET 只改 preset
+  recording: beginTask 写好的 task 还在。停段后 pendingSegments 加 1，segmentInfo 追加
+  segmentDecision: task 不变。CONTINUE_SPEAKING 回到录音的 starting，不再播「请说吧」
+  transcribing: 进入时 newRequestId。成功后 dialogueInputs 追加，pendingSegments 归 0
+  interpreting: 进入时再换 requestId。PROPOSE_MEANING 写入 proposedMeaning
+  confirming: CONFIRM_YES 把 proposedMeaning 抄到 confirmedMeaning
+  translating: 进入时再换 requestId。成功写入 translatedText，此时还没有 lastDelivered
+  result: 播放结束才调用 deliveredMemory
+  delivered: 这是 result 里面的 delivered。task 还在，直到 NEW_TURN
+
+  [*] --> idle
+  idle --> recording: START_TASK / beginTask
+  idle --> recording: 空闲时 SWITCH_REQUESTED / 同样 beginTask
+  recording --> segmentDecision: STOP_SEGMENT 或 30 秒到 / 停段成功
+  recording --> recoverableError: startRecording 或 stopRecording 失败 / error.stage 为 recorder
+  segmentDecision --> recording: CONTINUE_SPEAKING / 回到 recStarting
+  segmentDecision --> transcribing: FINISH_INPUT / 进入时 newRequestId
+  transcribing --> transcribing: isStale / 不改 task
+  transcribing --> interpreting: 识别成功且方向是 ZH_TO_SV
+  transcribing --> translating: 识别成功且方向是 SV_TO_ZH / 同时写入 sourceText
+  interpreting --> confirming: PROPOSE_MEANING / 写入 proposedMeaning
+  confirming --> translating: CONFIRM_YES / 写入 confirmedMeaning
+  translating --> result: 翻译 onDone / 写入 translatedText
+  result --> delivered: DELIVERY_FINISHED / 写入 lastDelivered
+  delivered --> idle: NEW_TURN / 清空 task，留下 lastDelivered
+  delivered --> recording: START_TASK 或 SWITCH_REQUESTED / 再 beginTask
+```
+
+```mermaid
+stateDiagram-v2
+  interpreting --> clarifying: ASK_CLARIFICATION 且次数小于 3 / currentQuestion，clarificationCount 加 1
+  interpreting --> fallback: 次数用尽仍要问 / fallbackReason 为 CLARIFICATION_LIMIT
+  interpreting --> fallback: UNRESOLVED / fallbackReason 为 UNRESOLVED
+  interpreting --> recoverableError: 理解抛错 / error.stage 为 interpret
+  clarifying --> recording: START_ANSWER / inputPurpose 为 CLARIFICATION
+  confirming --> recording: CONFIRM_NO 且次数小于 2 / 清掉 proposedMeaning，correctionCount 加 1，用途 CORRECTION
+  confirming --> fallback: CONFIRM_NO 已满 2 次 / CORRECTION_LIMIT
+  transcribing --> asrEmpty: ASR_EMPTY 且 asrRetryCount 小于 2 / asrRetryCount 加 1
+  transcribing --> fallback: 空识别已满 / ASR_EMPTY_LIMIT
+  transcribing --> recoverableError: 其它识别错误 / error.stage 为 asr
+  translating --> recoverableError: 翻译抛错 / error.stage 为 translate
+  asrEmpty --> recording: RETRY / 从 prompting 再录，会再播短句
+  recoverableError --> transcribing: RETRY 且 stage 为 asr / 清空 error
+  recoverableError --> interpreting: RETRY 且 stage 为 interpret / 清空 error
+  recoverableError --> translating: RETRY 且 stage 为 translate / 清空 error
+  recoverableError --> segmentDecision: RETRY 且还有 pendingSegments
+  recoverableError --> recording: RETRY 且没有待识别的段
+  fallback --> recording: RESTART / 先记取消，再 beginTask 同一方向
+  state "safeReturnState 记下的那一步" as checkpoint
+  recording --> confirmingSwitch: SWITCH_REQUESTED / 写入 pendingDirection 和 safeReturnState，activeRequestId 清空
+  confirmingSwitch --> recording: SWITCH_YES / beginTask 新方向，只留 lastDelivered
+  confirmingSwitch --> checkpoint: SWITCH_NO / clearSwitchRequest，已录的段和计数留着
+```
+
+任务进行中的 `CANCEL` 回到 `idle`，不写 `lastDelivered`。`segmentDecision`、`transcribing`、`interpreting`、`clarifying`、`confirming`、`translating`、`result`、`asrEmpty`、`recoverableError`、`fallback` 收到 `SWITCH_REQUESTED` 时，和录音中一样进入 `confirmingSwitch`，`safeReturnState` 记下离开的那一步。`SWITCH_NO` 时，如果离开点是 `recording` 而且 `pendingSegments` 还是 0，没有段可以决定，就重新 `startRecording`。
+
 ## 文件开头：依赖和过期结果
 
 `createDialogueMachine(deps)` 接收外面传进来的零件：录音机、音频库、播放、HTTP、记日志。状态机自己不 `fetch`。

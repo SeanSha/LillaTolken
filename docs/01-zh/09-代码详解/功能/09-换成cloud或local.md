@@ -2,6 +2,50 @@
 
 例子：同一句「我想去厕所。」，先用 mock 走完，再把预设换成 local 走一遍。孩子点的仍是「中文 → Svenska」「说完了」「是」。屏幕顺序不变。
 
+状态机调用的演员名字不变。`context()` 按 `X-Provider-Preset` 换成下面三套里的一套，再由 `observe` 包住。
+
+```mermaid
+sequenceDiagram
+  participant M as machine.ts
+  participant API as apiClient.ts
+  participant SV as app.ts
+  participant OB as observe.ts
+  participant MK as mock/index.ts
+  participant CL as cloud/index.ts
+  participant LC as local
+
+  M->>API: 演员 transcribe、interpret、translate、synthesize
+  API->>SV: 仍是 /api/asr、/api/interpret、/api/translate、/api/tts
+  SV->>SV: context 读取 X-Provider-Preset
+  SV->>OB: observe
+
+  alt preset 为 mock
+    OB->>MK: MockSpeechRecognizer.transcribe 交回剧本
+    OB->>MK: MockDialogueModel.interpretChinese
+    OB->>MK: MockSpeechSynthesizer.synthesize 调用 makeToneWav
+    OB->>MK: MockDialogueModel.translate
+    OB->>MK: 译文再走一次 synthesize 和 makeToneWav
+  else preset 为 cloud
+    OB->>CL: OpenAISpeechRecognizer.transcribe
+    CL->>CL: audioForUpload 可调用 transcodeToWav，再 transcriptions.create
+    OB->>CL: OpenAIDialogueModel.interpretChinese
+    CL->>CL: completeJson 调用 chat.completions.create，再 parseInterpretation
+    OB->>CL: OpenAISpeechSynthesizer.synthesize
+    CL->>CL: usesRealtimeTts 为真时调用 synthesizeRealtimeTts
+    OB->>CL: translate 再走 completeJson，然后 parseTranslation
+  else preset 为 local
+    OB->>LC: LocalSpeechRecognizer.transcribe
+    LC->>LC: whisper.ts 的 convertToWav 跑 ffmpeg，再 POST /inference，最后 cleanWhisperText
+    OB->>LC: LocalDialogueModel.interpretChinese
+    LC->>LC: ollama.ts 的 chatJson 调用 /api/chat，再 parseInterpretation
+    OB->>LC: LocalSpeechSynthesizer.synthesize
+    LC->>LC: voiceFor 之后 run say
+    OB->>LC: translate 再走 chatJson，然后 parseTranslation
+  end
+```
+
+local 某一台没开时，这次调用失败，`preset` 不会被改成 cloud。
+
 ## 预设在哪选定
 
 1. 打开页面时，[presetPreference.ts](../web/services/presetPreference.md) 读网址里的 `preset`，其次读上次记住的值。cloud 还没被大人确认过时，回到 mock。
