@@ -10,6 +10,93 @@
 
 这一轮要记住的字段都在 `MachineContext` 里，类型在 [types.ts](types.md)。改这些字段的是下面的 `assign`：`beginTask`、`newRequestId`、`deliveredMemory`，以及各阶段 `onDone` 里的 `patchTask`。录音字节在 `audioStore`，不进这份记录。
 
+`App.tsx` 的 `useActor` 一直握着一份 `snap`。它就是下面这种 JSON：`value` 是现在停在哪一步，`context` 是记下的字段。三份例子是同一台机器的三个时刻，编号只是示意。
+
+刚打开，还没有一轮对话。`task` 是 `null`。
+
+```json
+{
+  "value": "idle",
+  "context": {
+    "sessionId": "session-1",
+    "preset": "mock",
+    "task": null,
+    "lastDelivered": null,
+    "pendingDirection": null,
+    "safeReturnState": null,
+    "activeRequestId": null,
+    "error": null,
+    "fallbackReason": null,
+    "audioStatus": "none",
+    "segmentStartedAt": null
+  }
+}
+```
+
+「我想去厕所。」已经听写完、也提出了意思，确认屏还没点「是」。译文还没有。`value` 里的三层就是阶段：正在任务中、正在确认、正在等孩子点。
+
+```json
+{
+  "value": { "task": { "confirming": "asking" } },
+  "context": {
+    "sessionId": "session-1",
+    "preset": "mock",
+    "task": {
+      "id": "task-1",
+      "direction": "ZH_TO_SV",
+      "preset": "mock",
+      "inputPurpose": "INITIAL",
+      "segmentInfo": [{ "id": "seg-1", "durationMs": 1800, "purpose": "INITIAL" }],
+      "pendingSegments": 0,
+      "dialogueInputs": [{ "purpose": "INITIAL", "textParts": ["我想去厕所。"] }],
+      "proposedMeaning": "我想去厕所。",
+      "currentQuestion": null,
+      "confirmedMeaning": null,
+      "sourceText": null,
+      "translatedText": null,
+      "clarificationCount": 0,
+      "correctionCount": 0,
+      "asrRetryCount": 0,
+      "startedAt": 0
+    },
+    "lastDelivered": null,
+    "pendingDirection": null,
+    "safeReturnState": null,
+    "activeRequestId": "req-confirm",
+    "error": null,
+    "fallbackReason": null,
+    "audioStatus": "ready",
+    "segmentStartedAt": null
+  }
+}
+```
+
+播放结束并回到首页之后，`task` 又变成 `null`，阶段回到 `idle`。上一句留在 `lastDelivered`。中文到瑞典语时，`source` 是点过「是」的 `confirmedMeaning`，`translation` 是译文。
+
+```json
+{
+  "value": "idle",
+  "context": {
+    "sessionId": "session-1",
+    "preset": "mock",
+    "task": null,
+    "lastDelivered": {
+      "taskId": "task-1",
+      "direction": "ZH_TO_SV",
+      "source": "我想去厕所。",
+      "translation": "Jag vill gå på toaletten."
+    },
+    "pendingDirection": null,
+    "safeReturnState": null,
+    "activeRequestId": null,
+    "error": null,
+    "fallbackReason": null,
+    "audioStatus": "none",
+    "segmentStartedAt": null
+  }
+}
+```
+
 这里用两种图。
 
 调用顺序图看时间。竖着往下是「我想去厕所。」点「是」的那一遍。实线是调用，格子里的名字能在源码里搜到。界面把事件送进来，状态机先改 context，再调用 `speakPrompt`、`startRecording`、`stopRecording`、`transcribe`、`interpret`、`translate`、`synthesize`。这些名字写在 `actors` 里，由 `src` 指过去，然后再去调 [runtime.ts](../services/runtime.md)。完整的 HTTP 函数链在 [说中文，翻成瑞典语](../../功能/01-说中文翻成瑞典语.md)。
