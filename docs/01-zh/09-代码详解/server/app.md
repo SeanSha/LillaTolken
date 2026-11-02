@@ -22,20 +22,14 @@ X-Request-Id
 
 客户端断开时，这里 abort 正在进行的上游调用。所以孩子点取消后，服务器不必把这次识别做完。
 
-```ts
-function context(req) {
-  const presetResult = PresetSchema.safeParse(req.header('x-provider-preset') ?? 'mock');
-  if (!presetResult.success) throw new AppError('BAD_REQUEST', 'unknown provider preset');
-  const preset = presetResult.data;
-  if (!registry[preset].available && preset !== 'local') {
-    throw new AppError('NOT_CONFIGURED', registry[preset].unavailableReason);
-  }
-  const taskId = req.header('x-task-id') ?? '';
-  const requestId = req.header('x-request-id') ?? '';
-  if (!ID_RE.test(taskId) || !ID_RE.test(requestId)) throw new AppError('BAD_REQUEST', 'missing or invalid ids');
-  const controller = new AbortController();
-  req.on('aborted', () => controller.abort());
-  return { provider: { bundle: observed[preset] }, meta: { taskId, requestId, signal: controller.signal }, preset };
+```text
+function 读出这一次该用哪一套(请求) {
+  预设 = 请求头里的预设，没有就当 mock
+  if (判定预设名字不认识) 直接拒绝
+  if (判定这套现在不可用，并且它不是 local) 拒绝，不改去另一套
+  if (判定任务编号或请求编号不合格) 直接拒绝
+  孩子取消、连接断开时，停掉这次还在进行的模型调用
+  return 选中的那一套，以及这两个编号
 }
 ```
 
@@ -52,37 +46,27 @@ function context(req) {
 
 这些路由没有登录。
 
-```ts
-app.post('/api/asr', async (req, res) => {
-  const { provider, meta } = context(req);
-  const language = LanguageSchema.parse(req.query.language);
-  const text = await provider.bundle.asr.transcribe(
-    {
-      bytes: req.body,
-      mimeType: req.header('content-type'),
-      mockTranscript: req.header('x-mock-transcript') ? decodeURIComponent(req.header('x-mock-transcript')) : undefined,
-    },
-    language,
-    meta,
-  );
-  res.json({ text });
-});
+```text
+收到识别请求 {
+  读出该用哪一套
+  if (判定语言不是中文或瑞典语) 拒绝
+  if (判定预设是 mock，并且头里带了剧本文字) 把那段文字交给假识别
+  调用这一套的识别
+  返回识别出的文字
+}
 
-app.post('/api/interpret', async (req, res) => {
-  const { provider, meta } = context(req);
-  const parsed = InterpretRequestSchema.parse(req.body);
-  const result = await provider.bundle.dialogue.interpretChinese(
-    { ...parsed, previousDelivered: config.promptMemory ? parsed.previousDelivered : null },
-    meta,
-  );
-  res.json(result);
-});
+收到理解请求 {
+  读出该用哪一套
+  if (判定没有打开「记住上一句」) 丢掉客户端带来的上一句
+  调用这一套的理解
+  返回追问、提出意思，或无法判断
+}
 
-app.post('/api/translate', async (req, res) => {
-  const { provider, meta } = context(req);
-  const translation = await provider.bundle.dialogue.translate(TranslateRequestSchema.parse(req.body), meta);
-  res.json({ translation });
-});
+收到翻译请求 {
+  读出该用哪一套
+  调用这一套的翻译
+  返回译文
+}
 ```
 
 ## 词卡和评估

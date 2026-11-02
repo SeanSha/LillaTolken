@@ -10,19 +10,19 @@
 
 例子：状态是 `idle`，返回 `home`。状态在确认的提问，返回 `confirm`。正在等识别，前面的判断都对不上，返回 `busy`。
 
-```ts
-function screenOf(s) {
-  if (s.matches('idle')) return 'home';
-  if (s.matches('confirmingSwitch')) return 'switch';
-  if (s.matches({ task: 'recording' })) return 'recording';
-  if (s.matches({ task: 'segmentDecision' })) return 'segmentDecision';
-  if (s.matches({ task: { clarifying: 'asking' } })) return 'clarify';
-  if (s.matches({ task: { confirming: 'asking' } })) return 'confirm';
-  if (s.matches({ task: 'result' }) && !s.matches({ task: { result: 'synthesizing' } })) return 'result';
-  if (s.matches({ task: 'recoverableError' })) return 'error';
-  if (s.matches({ task: 'fallback' })) return 'fallback';
-  if (s.matches({ task: 'asrEmpty' })) return 'asrEmpty';
-  return 'busy';
+```text
+function 把状态翻译成屏幕(当前状态) {
+  if (判定还在首页) return 首页
+  if (判定正在问要不要换方向) return 换方向
+  if (判定正在录音) return 录音
+  if (判定在问继续还是说完) return 这一屏
+  if (判定短问题已经问出来了) return 提问
+  if (判定确认句已经问出来了) return 确认
+  if (判定到了结果，并且语音已经准备好) return 结果
+  if (判定这一步失败了还能重试) return 错误
+  if (判定问到头或听空太多次) return 兜底
+  if (判定没听清) return 再录一次
+  return 忙碌
 }
 ```
 
@@ -32,12 +32,12 @@ function screenOf(s) {
 
 忙碌屏再分成四段，好让成人看见卡在哪。对不上前三个时当作 `tts`。
 
-```ts
-function busyStage(s) {
-  if (s.matches({ task: 'transcribing' })) return 'asr';
-  if (s.matches({ task: 'interpreting' })) return 'interpret';
-  if (s.matches({ task: 'translating' })) return 'translate';
-  return 'tts';
+```text
+function 忙碌到了哪一步(当前状态) {
+  if (判定正在把声音变成文字) return 识别
+  if (判定正在理解中文意思) return 理解
+  if (判定正在翻译) return 翻译
+  return 准备语音
 }
 ```
 

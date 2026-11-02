@@ -12,32 +12,32 @@
 
 例子：点「中文 → Svenska」，发出的方向是 `ZH_TO_SV`。
 
-```tsx
-const start = (direction) => {
-  player.unlock();
-  send({ type: 'START_TASK', direction });
-};
+```text
+function 开始一轮(方向) {
+  先让手机允许之后播放声音
+  告诉状态机：开始任务，方向是这个
+}
 
-<BigButton onClick={() => start('ZH_TO_SV')} />
-<BigButton onClick={() => start('SV_TO_ZH')} />
+点「中文 → Svenska」→ 开始一轮(中文到瑞典语)
+点「Svenska → 中文」→ 开始一轮(瑞典语到中文)
 ```
 
 ## `RecordingScreen`
 
 大停止按钮发送 `STOP_SEGMENT`。倒计时到 0 时由钩子发出 `SEGMENT_TIMEOUT`。短句还在播放时可以 `SKIP_PROMPT`。
 
-```tsx
-onClick={() => send({ type: 'STOP_SEGMENT' })}
-onClick={() => send({ type: 'SKIP_PROMPT' })}
+```text
+点停止 → 告诉状态机：这一段说完了
+点跳过短句 → 告诉状态机：不用再听「请说吧」
 ```
 
 ## `SegmentDecisionScreen`
 
 「继续」再录一段。「说完」把已经录下的各段送去识别。
 
-```tsx
-onClick={() => send({ type: 'CONTINUE_SPEAKING' })}
-onClick={() => send({ type: 'FINISH_INPUT' })}
+```text
+点继续 → 告诉状态机：再录一段，仍是这一轮
+点说完 → 告诉状态机：把已经录下的各段送去识别
 ```
 
 ## `BusyScreen`
@@ -48,13 +48,13 @@ onClick={() => send({ type: 'FINISH_INPUT' })}
 
 `kind` 决定这一屏的按钮。确认「我想去厕所」点是，才会翻译。
 
-```tsx
-if (kind === 'clarify') {
-  onClick={() => send({ type: 'START_ANSWER' })}
+```text
+if (判定这一屏是在追问) {
+  点麦克风 → 告诉状态机：开始回答
 }
-if (kind === 'confirm') {
-  onClick={() => send({ type: 'CONFIRM_YES' })}
-  onClick={() => send({ type: 'CONFIRM_NO' })}
+if (判定这一屏是在确认) {
+  点是 → 告诉状态机：意思对
+  点不是 → 告诉状态机：意思不对
 }
 ```
 
@@ -62,24 +62,20 @@ if (kind === 'confirm') {
 
 声音放完，发出送达。播放失败时，大人可以接受只看文字。再来一轮或回首页是另外两个事件。
 
-```tsx
-if (pending) send({ type: 'DELIVERY_FINISHED', mode: 'audio' });
-onClick={() => send({ type: 'DELIVERY_FINISHED', mode: 'text_only' })}
-onClick={() => send({ type: 'START_TASK', direction: task.direction })}
-onClick={() => send({ type: 'NEW_TURN' })}
+```text
+if (判定声音正在等着播完) {
+  播完 → 告诉状态机：已经用声音送达
+}
+点只看文字 → 告诉状态机：大人接受没有声音
+点再来一次 → 用同一个方向再开一轮
+点回首页 → 告诉状态机：这一轮结束
 ```
 
 ## `SwitchScreen`、`ErrorScreen`、`FallbackScreen`、`AsrEmptyScreen`
 
-```tsx
-onClick={() => send({ type: 'SWITCH_YES' })}
-onClick={() => send({ type: 'SWITCH_NO' })}
-
-onClick={() => send({ type: 'RETRY' })}
-onClick={() => send({ type: 'CANCEL' })}
-
-onClick={() => send({ type: 'RESTART' })}
-onClick={() => send({ type: 'CANCEL' })}
-
-onClick={() => send({ type: 'RETRY' })}
+```text
+换方向屏：点换 → 换成另一个方向；点留下 → 回到刚才那一步
+错误屏：点重试 → 再做失败的那一步；点取消 → 回首页
+兜底屏：点重新开始 → 同一方向再来一轮；点取消 → 回首页
+没听清：点再录 → 回到录音
 ```

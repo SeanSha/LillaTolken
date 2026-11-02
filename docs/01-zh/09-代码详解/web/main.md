@@ -14,24 +14,17 @@
 
 这里不用 React 的 StrictMode。状态机要管麦克风，同一段副作用只能跑一次。
 
-```tsx
-const root = document.getElementById('root');
-if (!root) throw new Error('Missing #root');
-const mount = root;
-
+```text
 async function start() {
-  if (window.location.pathname === '/monitor' || window.location.pathname.startsWith('/monitor/')) {
-    const { MonitorApp } = await import('./monitor/MonitorApp');
-    await import('./monitor/monitor.css');
-    createRoot(mount).render(<MonitorApp />);
-    return;
+  if (判定打开的网页地址尾部是否有 /monitor 或者 /monitor/) {
+    只加载监控页和监控样式
+    显示监控登录
+    return
   }
-  const [{ App }] = await Promise.all([import('./ui/App'), import('./styles.css')]);
-  // No StrictMode: the dialogue actor owns audio/microphone side effects that must run exactly once.
-  createRoot(mount).render(<App />);
+  加载儿童界面和儿童样式
+  // 不用 StrictMode：状态机要管麦克风，同一段副作用只能跑一次
+  显示儿童界面
 }
-
-void start();
 ```
 
-上面按真实文件缩过。判断、函数名和 `return` 的位置跟源码一致，省掉了导入那一行。
+外形仍是原来的 `if` 和 `return`。括号里写成这一步在判定什么，不再把源码那一行原样抄上。

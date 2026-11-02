@@ -14,24 +14,19 @@
 
 例子：孩子已经点了取消，识别结果才回来。`requestId` 已经换过，这条结果不能把界面拉回去。
 
-```ts
-const isStale = (context, out) =>
-  out.requestId !== context.activeRequestId || out.taskId !== context.task?.id;
+```text
+function 这条结果是不是过期了(返回, 当前任务) {
+  if (判定返回上的请求编号，或任务编号，对不上当前这一轮) {
+    return 丢掉，不改界面
+  }
+}
 
-function beginTask(ctx, direction) {
-  return {
-    task: {
-      id: newId(),
-      direction,
-      preset: ctx.preset,
-      inputPurpose: 'INITIAL',
-      clarificationCount: 0,
-      correctionCount: 0,
-      asrRetryCount: 0,
-      proposedMeaning: null,
-      confirmedMeaning: null,
-    },
-  };
+function 开始一轮(方向) {
+  新建任务
+  方向用按钮传来的
+  预设抄下现在的，这一轮不再改
+  追问、改正、空识别的次数都从 0 开始
+  还没有提出的意思，也还没有确认过的意思
 }
 ```
 
@@ -41,19 +36,11 @@ function beginTask(ctx, direction) {
 
 进入任务时，预设被复制进 `task.preset`，这一轮不能再换。计数器从 0 开始。`SET_PRESET` 只在空闲时接受。任务进行中改预设会被忽略。空闲时如果直接要求换方向，不再追问，当作开始那一个方向。
 
-```ts
-idle: {
-  on: {
-    START_TASK: {
-      target: '#recording',
-      actions: assign(({ context, event }) => beginTask(context, event.direction)),
-    },
-    SWITCH_REQUESTED: {
-      target: '#recording',
-      actions: assign(({ context, event }) => beginTask(context, event.direction)),
-    },
-    SET_PRESET: { actions: assign({ preset: ({ event }) => event.preset }) },
-  },
+```text
+空闲时 {
+  收到「开始任务」→ 进入录音，并按上面新建这一轮
+  收到「换方向」→ 同样直接进入录音，不再追问
+  收到「改预设」→ 只改预设，留在首页
 }
 ```
 
@@ -71,29 +58,22 @@ idle: {
 
 mock 时，录音机交给状态机的是场景剧本，不是真实声波。状态机不关心声音从哪来，它只收下一段音频。
 
-```ts
-recording: {
-  initial: 'prompting',
-  states: {
-    prompting: {
-      invoke: { src: 'speakPrompt', onDone: 'starting', onError: 'starting' },
-      on: { SKIP_PROMPT: 'starting' },
-    },
-    starting: {
-      invoke: {
-        src: 'startRecording',
-        onDone: 'listening',
-        onError: '#recoverableError',
-      },
-    },
-    listening: {
-      after: { segmentTimeout: 'finalizing' },
-      on: { STOP_SEGMENT: 'finalizing', SEGMENT_TIMEOUT: 'finalizing' },
-    },
-    finalizing: {
-      invoke: { src: 'stopRecording', onDone: '#segmentDecision' },
-    },
-  },
+```text
+录音 {
+  先播放「请说吧」
+  if (判定短句说完，或者孩子点了跳过，或者短句没播出来) {
+    打开麦克风
+  }
+  if (判定麦克风打不开) {
+    进入还能重试的错误
+    return
+  }
+  听着 {
+    if (判定孩子点了停止，或者这一段到了 30 秒) {
+      停下这一段
+      进入「继续说，还是说完了」
+    }
+  }
 }
 ```
 
@@ -106,12 +86,10 @@ recording: {
 
 例子：「老师……」「他把我的……」「水壶拿走了。」是三段，一次 `FINISH_INPUT`，一次翻译。
 
-```ts
-segmentDecision: {
-  on: {
-    CONTINUE_SPEAKING: '#recStarting',
-    FINISH_INPUT: '#transcribing',
-  },
+```text
+继续还是说完 {
+  收到「继续」→ 再录一段，仍是这一轮
+  收到「说完了」→ 去识别
 }
 ```
 
@@ -126,25 +104,19 @@ segmentDecision: {
 
 识别完，`audioStore` 里这一轮的段落被清掉。空识别走的是 `onError`，错误类别是 `ASR_EMPTY`，不是成功返回一个空字符串。
 
-```ts
-transcribing: {
-  invoke: {
-    src: 'transcribe',
-    onDone: [
-      { guard: ({ context, event }) => isStale(context, event.output) },
-      { guard: ({ context }) => context.task?.direction === 'SV_TO_ZH', target: '#translating' },
-      { target: '#interpreting' },
-    ],
-    onError: [
-      {
-        guard: ({ context, event }) =>
-          errorOf(event) === 'ASR_EMPTY' && task.asrRetryCount < LIMITS.asrRetries,
-        target: '#asrEmpty',
-      },
-      { guard: ({ event }) => errorOf(event) === 'ASR_EMPTY', target: '#fallback' },
-      { target: '#recoverableError' },
-    ],
-  },
+```text
+识别 {
+  调用识别
+  成功时 {
+    if (判定这条结果已经过期) return 丢掉
+    if (判定方向是瑞典语到中文) 去翻译
+    否则 去理解中文
+  }
+  失败时 {
+    if (判定是没听清，并且空识别还不到 2 次) 去再录一次
+    if (判定仍是没听清) 去兜底
+    否则 去还能重试的错误
+  }
 }
 ```
 
@@ -163,27 +135,16 @@ transcribing: {
 
 例子：「他拿走了我的那个。」可能得到一个短问题。界面只显示这一个问题。第 4 个问题不会出现，因为次数已经到 3 时走兜底。
 
-```ts
-interpreting: {
-  invoke: {
-    src: 'interpret',
-    input: ({ context }) => ({
-      dialogueInputs: context.task.dialogueInputs,
-      remainingClarifications: Math.max(0, LIMITS.semanticClarifications - context.task.clarificationCount),
-    }),
-    onDone: [
-      { guard: ({ context, event }) => isStale(context, event.output) },
-      {
-        guard: ({ context, event }) =>
-          event.output.result.kind === 'ASK_CLARIFICATION' &&
-          context.task.clarificationCount < LIMITS.semanticClarifications,
-        target: '#clarifying',
-      },
-      { guard: ({ event }) => event.output.result.kind === 'ASK_CLARIFICATION', target: '#fallback' },
-      { guard: ({ event }) => event.output.result.kind === 'PROPOSE_MEANING', target: '#confirming' },
-      { target: '#fallback' },
-    ],
-  },
+```text
+理解 {
+  把已经听写的句子，和还剩几次追问，交给模型
+  返回时 {
+    if (判定这条结果已经过期) return 丢掉
+    if (判定模型要追问，并且次数还不到 3) 去问这一个短问题，次数加 1
+    if (判定模型还要追问) 去兜底
+    if (判定模型提出了一个意思) 记下这个意思，去确认
+    否则 去兜底
+  }
 }
 ```
 
@@ -191,17 +152,11 @@ interpreting: {
 
 播放这个问题。孩子点 `START_ANSWER` 后回到录音。这一段的用途标成 `CLARIFICATION`，仍然是同一个任务，不是新的一轮。问句的语音没合成出来，仍进入提问屏，大人可以看字。
 
-```ts
-clarifying: {
-  initial: 'synthesizing',
-  states: {
-    synthesizing: {
-      invoke: { src: 'synthesize', input: synthInput('question'), onDone: 'asking', onError: 'asking' },
-    },
-    asking: {
-      on: { START_ANSWER: { target: '#recording', actions: beginInput('CLARIFICATION') } },
-    },
-  },
+```text
+追问 {
+  先把这个短问题读出来
+  if (判定语音没读出来) 仍进入提问，大人可以看字
+  孩子点回答 → 回到录音，这一段算作回答，仍是同一轮
 }
 ```
 
@@ -213,23 +168,15 @@ clarifying: {
 - `CONFIRM_NO`：次数不到 2 时回到录音，用途是 `CORRECTION`。
 - 已经纠正过 2 次：去 `fallback`。
 
-```ts
-confirming: {
-  initial: 'synthesizing',
-  states: {
-    synthesizing: {
-      invoke: { src: 'synthesize', input: synthInput('confirmation'), onDone: 'asking', onError: 'asking' },
-    },
-    asking: {
-      on: {
-        CONFIRM_YES: { target: '#translating' },
-        CONFIRM_NO: [
-          { guard: ({ context }) => context.task.correctionCount < LIMITS.correctionAttempts, target: '#recording' },
-          { target: '#fallback' },
-        ],
-      },
-    },
-  },
+```text
+确认 {
+  先朗读「你是说：……，对吗？」
+  if (判定这句话没读出来) 仍进入确认屏，大人可以看字
+  点是 → 记下确认过的意思，去翻译
+  点不是 {
+    if (判定改正还不到 2 次) 回到录音，这一段算作改正
+    否则 去兜底
+  }
 }
 ```
 
@@ -237,17 +184,12 @@ confirming: {
 
 调用 `translate`。中文到瑞典语时，翻译的文本是确认过的中文意思，不是最初没确认的识别稿。然后进入 `result`。
 
-```ts
-translating: {
-  invoke: {
-    src: 'translate',
-    input: ({ context }) => ({
-      text: context.task.direction === 'ZH_TO_SV' ? context.task.confirmedMeaning : context.task.sourceText,
-      direction: context.task.direction,
-    }),
-    onDone: '#result',
-    onError: '#recoverableError',
-  },
+```text
+翻译 {
+  if (判定方向是中文到瑞典语) 翻译已经确认的那句中文
+  否则 翻译刚识别出的瑞典语
+  成功 → 去结果
+  失败 → 去还能重试的错误
 }
 ```
 
@@ -257,26 +199,15 @@ translating: {
 
 `NEW_TURN` 回到空闲。也可以直接再开始另一个方向。
 
-```ts
-result: {
-  initial: 'synthesizing',
-  states: {
-    synthesizing: {
-      invoke: { src: 'synthesize', input: synthInput('result'), onDone: 'pending', onError: 'ttsFailed' },
-    },
-    pending: {
-      on: { DELIVERY_FINISHED: { guard: ({ event }) => event.mode === 'audio', target: 'delivered' } },
-    },
-    ttsFailed: {
-      on: {
-        RETRY: 'synthesizing',
-        DELIVERY_FINISHED: { guard: ({ event }) => event.mode === 'text_only', target: 'delivered' },
-      },
-    },
-    delivered: {
-      on: { NEW_TURN: '#idle', START_TASK: '#recording' },
-    },
-  },
+```text
+结果 {
+  先把译文读出来
+  读出来了 → 等播放结束
+  没读出来 → 停在失败，字还在
+  if (判定声音已经播完) 记成已经送达
+  if (判定朗读失败，并且大人接受只看文字) 也记成已经送达
+  点回首页 → 回到空闲
+  点再来一轮 → 再进入录音
 }
 ```
 
@@ -286,20 +217,18 @@ result: {
 
 问满、纠正满、空识别满，进入 `fallback`。可以 `RESTART` 同一方向重来，或 `CANCEL` 回首页。失败的任务不会被记成已送达。
 
-```ts
-recoverableError: {
-  on: {
-    RETRY: [
-      { guard: ({ context }) => context.error?.stage === 'asr', target: '#transcribing' },
-      { guard: ({ context }) => context.error?.stage === 'interpret', target: '#interpreting' },
-      { guard: ({ context }) => context.error?.stage === 'translate', target: '#translating' },
-      { target: '#recording' },
-    ],
-  },
+```text
+还能重试的错误 {
+  点重试 {
+    if (判定失败在识别) 回到识别
+    if (判定失败在理解) 回到理解
+    if (判定失败在翻译) 回到翻译
+    否则 回到录音
+  }
 }
 
-fallback: {
-  on: { RESTART: '#recording' },
+兜底 {
+  点重新开始 → 用同一方向再开一轮，进入录音
 }
 ```
 
@@ -312,19 +241,17 @@ fallback: {
 
 空闲和已经送达时换方向，不再问这一句。
 
-```ts
-confirmingSwitch: {
-  on: {
-    SWITCH_YES: {
-      target: '#recording',
-      actions: assign(({ context }) => beginTask(context, context.pendingDirection)),
-    },
-    SWITCH_NO: [
-      { guard: ({ context }) => context.safeReturnState === 'transcribing', target: '#transcribing' },
-      { guard: ({ context }) => context.safeReturnState === 'confirming', target: '#confirming' },
-      { target: '#recording' },
-    ],
-  },
+```text
+问要不要换方向 {
+  点换 {
+    丢掉这一轮还没做完的内容
+    按新方向重新进入录音
+  }
+  点留下 {
+    if (判定刚才停在识别) 回到识别
+    if (判定刚才停在确认) 回到确认
+    否则 回到录音
+  }
 }
 ```
 

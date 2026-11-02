@@ -10,14 +10,15 @@
 
 `presetAtStart` 来自地址栏的 `?preset=`，否则用这台设备上次记住的预设。网址里是 `cloud`、大人还没确认过时，齿轮直接打开。
 
-```tsx
-const [presetAtStart] = useState(startingPreset);
-const [snap, send] = useActor(dialogueMachine, { input: { preset: presetAtStart } });
-const [devOpen, setDevOpen] = useState(() => {
-  const requested = new URLSearchParams(window.location.search).get('preset');
-  return requested === 'cloud' && !settings.get().cloudAcknowledged;
-});
-const screen = screenOf(snap);
+```text
+启动时 {
+  预设 = 地址栏里的预设，没有就用这台设备上次记住的
+  启动状态机，把这个预设交进去
+  屏幕名 = 把状态机现在的状态翻译成首页、录音、确认这类名字
+  if (判定地址栏要 cloud，并且大人还没确认过) {
+    直接打开齿轮
+  }
+}
 ```
 
 ## `feature`：词卡是另一条路
@@ -28,56 +29,51 @@ const screen = screenOf(snap);
 
 左上角返回把 `feature` 设回 `null`，对话首页又出现。
 
-```tsx
-const [feature, setFeature] = useState<null | 'photo' | 'library'>(null);
+```text
+词卡开关一开始是关着的
 
-// 词卡里的返回
-onClick={() => {
-  setOpeningFile(null);
-  setFeature(null);
-}}
+点词卡里的返回 {
+  清掉刚选的照片
+  词卡开关关掉
+  对话首页又出现
+}
 
-// 首页相机选中一张图
-onChange={(event) => {
-  const file = event.target.files?.[0] ?? null;
-  event.target.value = '';
-  if (!file) return;
-  setOpeningFile(file);
-  setFeature('photo');
-}}
+首页相机选中一张图 {
+  if (判定没有选到文件) {
+    return
+  }
+  记下这张照片
+  词卡开关打开，进入拍照
+}
 ```
 
 ## 顶栏
 
 任务进行中、并且这一轮还没送达时，左边是取消，右边可以换方向。齿轮打开 `DevPanel`，那是给成人的，不参与儿童流程。
 
-```tsx
-const taskActive = task !== null && screen !== 'switch';
-const delivered = snap.matches({ task: { result: 'delivered' } });
-const showTaskControls = taskActive && !delivered;
-
-onClick={() => send({ type: 'CANCEL' })}
-onClick={() => task && send({ type: 'SWITCH_REQUESTED', direction: otherDirection(task.direction) })}
-onClick={() => setDevOpen(true)}
+```text
+if (判定这一轮还在进行，并且还没把译文送出) {
+  左边按钮：告诉状态机取消
+  右边按钮：告诉状态机想换成另一个方向
+}
+齿轮：打开成人设置，不发给状态机
 ```
 
 ## 选择屏幕
 
 `feature` 为空时，按 `screen` 渲染对应的一屏。每个屏幕都收到 `snap` 和 `send`。它们不修改任务计数。`feature` 有值时，词卡盖在上面。
 
-```tsx
-{screen === 'home' && !feature && (
-  <HomeScreen {...props} onPhotoCards={() => homeCameraRef.current?.click()} onMyCards={() => setFeature('library')} />
-)}
-{screen === 'recording' && <RecordingScreen {...props} />}
-{screen === 'segmentDecision' && <SegmentDecisionScreen {...props} />}
-{screen === 'busy' && <BusyScreen {...props} />}
-{screen === 'clarify' && <QuestionScreen {...props} kind="clarify" />}
-{screen === 'confirm' && <QuestionScreen {...props} kind="confirm" />}
-{screen === 'result' && <ResultScreen {...props} />}
-{screen === 'switch' && <SwitchScreen {...props} />}
-{screen === 'error' && <ErrorScreen {...props} />}
-{screen === 'fallback' && <FallbackScreen {...props} />}
-{screen === 'asrEmpty' && !feature && <AsrEmptyScreen {...props} />}
-{feature && <VocabularyShell entry={feature} openingFile={openingFile} preset={snap.context.preset} />}
+```text
+if (判定是首页，并且没在看词卡) 画首页
+if (判定正在录音) 画录音屏
+if (判定在问继续还是说完) 画这一屏
+if (判定正在等识别、理解、翻译或语音) 画忙碌屏
+if (判定在问一个短问题) 画提问屏
+if (判定在等孩子点是或不是) 画确认屏
+if (判定译文已经准备好) 画结果屏
+if (判定在问要不要换方向) 画换方向屏
+if (判定这一步失败了还能重试) 画错误屏
+if (判定问到头或听空太多次) 画兜底屏
+if (判定没听清，并且没在看词卡) 画再录一次
+if (判定词卡开关开着) 改画词卡，对话屏先让开
 ```

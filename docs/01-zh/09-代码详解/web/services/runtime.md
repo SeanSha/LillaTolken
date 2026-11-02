@@ -26,24 +26,22 @@
 
 `prepare()` 会在短句快说完时提前打开真麦克风。mock 且不是真麦克风时，这个函数什么也不做。
 
-```ts
-choose() {
-  const { micMode } = settings.get();
-  if (activePreset !== 'mock') {
-    this.real ??= new MediaRecorderRecorder();
-    return this.real;
+```text
+function 选麦克风() {
+  if (判定当前预设不是 mock) {
+    return 真麦克风
   }
-  if (micMode === 'real') {
-    this.real ??= new MediaRecorderRecorder();
-    return new ScriptedRecorder(mockScript, this.real);
+  if (判定成人把麦克风设成了真的) {
+    return 用真麦克风录音，但交出去的文字仍是剧本
   }
-  return new ScriptedRecorder(mockScript);
+  return 剧本麦克风
 }
 
-async prepare() {
-  const { micMode } = settings.get();
-  if (activePreset === 'mock' && micMode !== 'real') return;
-  await this.real.prepare();
+function 提前打开麦克风() {
+  if (判定是 mock，并且没有要求真麦克风) {
+    return 什么也不做
+  }
+  打开真麦克风，等短句说完就能录
 }
 ```
 
@@ -51,19 +49,14 @@ async prepare() {
 
 文件末尾调用 `createDialogueMachine`。新任务开始时记住预设，并把剧本倒回第一句。所以每次新任务，T01 都从「我想去厕所。」重新来。
 
-```ts
-export const dialogueMachine = createDialogueMachine({
-  providers,
-  recorder,
-  audioStore,
-  speakPrompt: (id, language, hooks) => prompts.speak(id, language, hooks),
-  stopPlayback: () => player.stop(),
-  log: (fields) => logger.log(fields),
-  onTaskStarted: ({ preset }) => {
-    setActivePreset(preset);
-    mockScript.reset();
-  },
-});
+```text
+装配状态机 {
+  交进去：请求、录音机、音频库、短句、停止播放、记日志
+  新的一轮开始时 {
+    记住这一轮的预设
+    把剧本倒回第一句
+  }
+}
 ```
 
 ## `reportAudibleStart`
