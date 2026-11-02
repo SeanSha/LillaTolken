@@ -1,10 +1,10 @@
 # 05 Code guide
 
-Series: [01 System design](01-system-design.md) · [02 Developer guide](02-developer-guide.md) · [03 UI brief](03-ui-brief.md) · [04 Tab5 feasibility](04-tab5-feasibility.md) · **05 Code guide** · [06 Research prompts](06-research-prompts.md)
+Series: [01 System design](01-system-design.md) · [02 Developer guide](02-developer-guide.md) · [03 UI brief](03-ui-brief.md) · [04 Tab5 feasibility](04-tab5-feasibility.md) · **05 Code guide** · [06 Research prompts](06-research-prompts.md) · [07 Module structure](07-module-structure.md) · [08 How the modules fit](08-how-modules-fit.md)
 
 The Chinese file is in [`docs/01-zh`](../01-zh/05-代码导读.md).
 
-Read the project from the code. Product rules are in [01 System design](01-system-design.md). Install and commands are in [02 Developer guide](02-developer-guide.md).
+Read the project from the code. Product rules are in [01 System design](01-system-design.md). Install and commands are in [02 Developer guide](02-developer-guide.md). What each module does, with shortened code, is in [07 Module structure](07-module-structure.md). How one turn threads the modules together is in [08 How the modules fit](08-how-modules-fit.md).
 
 Read sections 1 to 3 first and follow one tap all the way through. Section 4 is a map. Open it when you need a file. Do not read it straight through.
 

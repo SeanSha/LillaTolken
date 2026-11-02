@@ -1,6 +1,6 @@
 # 02 Developer guide
 
-Series: [01 System design](01-system-design.md) · **02 Developer guide** · [03 UI brief](03-ui-brief.md) · [04 Tab5 feasibility](04-tab5-feasibility.md) · [05 Code guide](05-code-guide.md) · [06 Research prompts](06-research-prompts.md)
+Series: [01 System design](01-system-design.md) · **02 Developer guide** · [03 UI brief](03-ui-brief.md) · [04 Tab5 feasibility](04-tab5-feasibility.md) · [05 Code guide](05-code-guide.md) · [06 Research prompts](06-research-prompts.md) · [07 Module structure](07-module-structure.md) · [08 How the modules fit](08-how-modules-fit.md)
 
 The Chinese file is in [`docs/01-zh`](../01-zh/02-开发说明.md).
 

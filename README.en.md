@@ -180,6 +180,9 @@ Chinese is in [`docs/01-zh`](docs/01-zh/01-系统设计.md), with Chinese filena
 - [04 Tab5 feasibility](docs/02-en/04-tab5-feasibility.md): whether this can move onto Tab5 hardware
 - [05 Code guide](docs/02-en/05-code-guide.md): the architecture, what each file does, and how one turn runs
 - [06 Research prompts](docs/02-en/06-research-prompts.md): the prompts and output schemas used in the paper
+- [07 Module structure](docs/02-en/07-module-structure.md): what each module does, with shortened code
+- [08 How the modules fit](docs/02-en/08-how-modules-fit.md): how one turn threads those modules together
+- [09 Code walkthrough](docs/01-zh/09-代码详解/00-从这里开始.md): one Chinese page per source file, with a plain-language example. This folder is Chinese only.
 
 ## License
 
