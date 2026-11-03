@@ -1,10 +1,10 @@
 # 08 How the modules fit
 
-Series: [01 System design](01-system-design.md) · [02 Developer guide](02-developer-guide.md) · [03 UI brief](03-ui-brief.md) · [04 Tab5 feasibility](04-tab5-feasibility.md) · [05 Code guide](05-code-guide.md) · [06 Research prompts](06-research-prompts.md) · [07 Module structure](07-module-structure.md) · **08 How the modules fit**
+Series: [01 System design](01-system-design.md) · [02 Developer guide](02-developer-guide.md) · [03 UI brief](03-ui-brief.md) · [04 Tab5 feasibility](04-tab5-feasibility.md) · [05 Code guide](05-code-guide.md) · [06 Research prompts](06-research-prompts.md) · [07 Module structure](07-module-structure.md) · **08 How the modules fit** · [09 Code walkthrough](09-code-walkthrough/00-start-here.md)
 
 The Chinese file is in [`docs/01-zh`](../01-zh/08-模块怎么接在一起.md).
 
-[07 Module structure](07-module-structure.md) says what each piece does. This page follows what they pass to each other. The walkthrough uses mock, Chinese to Swedish. Cloud or local keeps the same arrows. The selected implementation on the server is what changes.
+[07 Module structure](07-module-structure.md) says what each piece does. This page follows what they pass to each other. Paragraphs inside each source file, and the step-by-step feature pages, are in [09 Code walkthrough](09-code-walkthrough/00-start-here.md). Feature order is in [By feature](09-code-walkthrough/features/00-by-feature.md). The walkthrough below uses mock, Chinese to Swedish. Cloud or local keeps the same arrows. The selected implementation on the server is what changes.
 
 ## 1. What crosses a boundary
 

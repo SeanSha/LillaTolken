@@ -201,7 +201,7 @@ stateDiagram-v2
 
 ## 4. 按阶段对照源码
 
-## 文件开头：依赖和过期结果
+### 文件开头：依赖和过期结果
 
 `createDialogueMachine(deps)` 接收外面传进来的零件：录音机、音频库、播放、HTTP、记日志。状态机自己不 `fetch`。
 
@@ -219,7 +219,7 @@ beginTask(ctx, direction) {
 }
 ```
 
-## `idle`：空闲，也就是首页
+### `idle`：空闲，也就是首页
 
 等待 `START_TASK`。事件里带着方向。
 
@@ -233,7 +233,7 @@ idle {
 }
 ```
 
-## `recording`：录音
+### `recording`：录音
 
 先播放短句「请说吧」，然后打开麦克风。一段最长 30 秒，数字来自 `LIMITS.segmentSeconds`。
 
@@ -257,7 +257,7 @@ recording，先从 prompting 开始 {
 }
 ```
 
-## `segmentDecision`：继续，还是说完
+### `segmentDecision`：继续，还是说完
 
 两个事件：
 
@@ -273,7 +273,7 @@ segmentDecision {
 }
 ```
 
-## `transcribing`：按顺序识别
+### `transcribing`：按顺序识别
 
 调用装配好的 `transcribe`。成功后看方向：
 
@@ -299,7 +299,7 @@ transcribing，src 是 transcribe {
 }
 ```
 
-## `interpreting`：理解中文
+### `interpreting`：理解中文
 
 调用 `interpret`。交给模型的包括已经听写的句子，以及还剩几次追问：`3 - clarificationCount`。
 
@@ -327,7 +327,7 @@ interpreting，src 是 interpret {
 }
 ```
 
-## `clarifying`：问一个短问题
+### `clarifying`：问一个短问题
 
 播放这个问题。孩子点 `START_ANSWER` 后回到录音。这一段的用途标成 `CLARIFICATION`，仍然是同一个任务，不是新的一轮。问句的语音没合成出来，仍进入提问屏，大人可以看字。
 
@@ -339,7 +339,7 @@ clarifying {
 }
 ```
 
-## `confirming`：必须点是，才翻译
+### `confirming`：必须点是，才翻译
 
 `text.ts` 把意思说成「你是说：我想去厕所，对吗？」
 
@@ -359,7 +359,7 @@ confirming {
 }
 ```
 
-## `translating`：翻译
+### `translating`：翻译
 
 调用 `translate`。中文到瑞典语时，翻译的文本是确认过的中文意思，不是最初没确认的识别稿。然后进入 `result`。
 
@@ -372,7 +372,7 @@ translating，src 是 translate {
 }
 ```
 
-## `result`：结果
+### `result`：结果
 
 播放目标语言。播放结束或成人接受纯文字时，发出 `DELIVERY_FINISHED`。这时才把这句话记成 `lastDelivered`。只是接口返回了译文，还不会记住。
 
@@ -390,7 +390,7 @@ result {
 }
 ```
 
-## `recoverableError` 和 `fallback`
+### `recoverableError` 和 `fallback`
 
 网络、超时、模型 JSON 不合法，进入 `recoverableError`。`RETRY` 回到失败的那一步：识别、理解、翻译或录音。
 
@@ -407,7 +407,7 @@ recoverableError 里点 RETRY {
 fallback 里 RESTART → #recording，并 beginTask
 ```
 
-## `confirmingSwitch`：任务中途换方向
+### `confirmingSwitch`：任务中途换方向
 
 录音或识别过程中发来 `SWITCH_REQUESTED`。先问要不要换。
 
@@ -427,6 +427,6 @@ confirmingSwitch {
 }
 ```
 
-## 读的时候可以只盯一个例子
+### 读的时候可以只盯一个例子
 
 用 mock 打开首页，选场景 T01「我想去厕所。」点说中文，点停止，点说完，点是。对照上面的状态名：`idle` → `recording` → `segmentDecision` → `transcribing` → `interpreting` → `confirming` → `translating` → `result`。

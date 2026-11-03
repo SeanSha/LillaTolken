@@ -182,7 +182,7 @@ Chinese is in [`docs/01-zh`](docs/01-zh/01-系统设计.md), with Chinese filena
 - [06 Research prompts](docs/02-en/06-research-prompts.md): the prompts and output schemas used in the paper
 - [07 Module structure](docs/02-en/07-module-structure.md): what each module does, with shortened code
 - [08 How the modules fit](docs/02-en/08-how-modules-fit.md): how one turn threads those modules together
-- [09 Code walkthrough](docs/01-zh/09-代码详解/00-从这里开始.md): one Chinese page per source file, with a plain-language example. This folder is Chinese only.
+- [09 Code walkthrough](docs/02-en/09-code-walkthrough/00-start-here.md): one page per user action, then one page per source file. Read each feature page as JSON, then the call sequence, then the steps. The file-by-file paragraphs that are still only in Chinese are linked from that index.
 
 ## License
 

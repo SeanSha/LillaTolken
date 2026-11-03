@@ -1,10 +1,10 @@
 # 07 Module structure
 
-Series: [01 System design](01-system-design.md) · [02 Developer guide](02-developer-guide.md) · [03 UI brief](03-ui-brief.md) · [04 Tab5 feasibility](04-tab5-feasibility.md) · [05 Code guide](05-code-guide.md) · [06 Research prompts](06-research-prompts.md) · **07 Module structure** · [08 How the modules fit](08-how-modules-fit.md)
+Series: [01 System design](01-system-design.md) · [02 Developer guide](02-developer-guide.md) · [03 UI brief](03-ui-brief.md) · [04 Tab5 feasibility](04-tab5-feasibility.md) · [05 Code guide](05-code-guide.md) · [06 Research prompts](06-research-prompts.md) · **07 Module structure** · [08 How the modules fit](08-how-modules-fit.md) · [09 Code walkthrough](09-code-walkthrough/00-start-here.md)
 
 The Chinese file is in [`docs/01-zh`](../01-zh/07-模块结构.md).
 
-This page answers what each module does. How one turn threads them together is in [08 How the modules fit](08-how-modules-fit.md). The file-by-file list stays in [05 Code guide](05-code-guide.md).
+This page answers what each module does. How one turn threads them together is in [08 How the modules fit](08-how-modules-fit.md). The file-by-file list stays in [05 Code guide](05-code-guide.md). What each section of a file does is in [09 Code walkthrough](09-code-walkthrough/00-start-here.md).
 
 The code below is shortened from the real files. Names and decisions match the code. Logging, timeouts, and edge cases are left out. Open the file named in each heading for the full version.
 
