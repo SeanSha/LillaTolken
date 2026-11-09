@@ -8,14 +8,14 @@
 
 `snap` 是状态机现在的快照。`send` 把按钮事件送回去。`screenOf` 把快照变成屏幕名。
 
-`presetAtStart` 来自地址栏的 `?preset=`，否则用这台设备上次记住的预设。网址里是 `cloud`、大人还没确认过时，齿轮直接打开。
+`presetAtStart` 来自地址栏的 `?preset=`，否则用这台设备上次记住的预设。两者都没有时从 cloud 开始。开发者面板只在地址是 `/developer` 或 `/developer/` 时打开。儿童首页上没有入口。
 
 ```text
 预设 presetAtStart = 地址栏里的预设，没有就用这台设备上次记住的 startingPreset
 useActor(dialogueMachine) 启动状态机，把 presetAtStart 交进去，得到 snap 和 send
 屏幕名 screen = screenOf(snap)，把状态翻译成首页、录音、确认
-if (地址栏 requested === 'cloud'，并且还没有 cloudAcknowledged) {
-  setDevOpen(true) 直接打开齿轮
+if (地址是 /developer 或 /developer/) {
+  打开 DevPanel
 }
 ```
 
@@ -44,14 +44,15 @@ feature 一开始是 null，后来可以是 'photo' 或 'library'
 
 ## 顶栏
 
-任务进行中、并且这一轮还没送达时，左边是取消，右边可以换方向。齿轮打开 `DevPanel`，那是给成人的，不参与儿童流程。
+任务进行中、并且这一轮还没送达时，左边是取消，右边可以换方向。`/developer/` 打开 `DevPanel`。点关闭后，地址回到 `/`，查询参数还在。那是给成人的，不参与儿童流程。
 
 ```text
 if (showTaskControls：这一轮还在进行，并且结果还没 delivered) {
   左边 send({ type: 'CANCEL' })
   右边 send({ type: 'SWITCH_REQUESTED', direction: otherDirection(...) })
 }
-齿轮 setDevOpen(true) 打开 DevPanel
+地址是 /developer/ 时打开 DevPanel
+关闭时把地址换成 /，面板收起
 ```
 
 ## 选择屏幕

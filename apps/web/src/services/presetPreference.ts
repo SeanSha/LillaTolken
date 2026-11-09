@@ -9,11 +9,12 @@ export function parsePreset(value: string | null | undefined): ProviderPreset | 
 
 /**
  * Which preset to start with. The `?preset=` query wins over the last choice saved on this device.
- * The adult/synthetic confirmation starts ticked. Cloud is used immediately unless that box was explicitly cleared.
+ * With neither, the app starts on cloud. The adult/synthetic confirmation starts ticked.
+ * Cloud is used immediately unless that box was explicitly cleared.
  */
 export function resolvePreset(options: { search: string; saved: ProviderPreset | null; cloudAcknowledged: boolean }): ProviderPreset {
   const fromUrl = parsePreset(new URLSearchParams(options.search.startsWith('?') ? options.search.slice(1) : options.search).get('preset'));
-  const chosen = fromUrl ?? options.saved ?? 'mock';
+  const chosen = fromUrl ?? options.saved ?? 'cloud';
   if (chosen === 'cloud' && !options.cloudAcknowledged) return 'mock';
   return chosen;
 }

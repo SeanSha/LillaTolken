@@ -13,12 +13,14 @@ describe('preset address and saved choice', () => {
   it('lets the query string override the saved choice', () => {
     expect(resolvePreset({ search: '?preset=local', saved: 'cloud', cloudAcknowledged: true })).toBe('local');
     expect(resolvePreset({ search: '', saved: 'local', cloudAcknowledged: false })).toBe('local');
-    expect(resolvePreset({ search: '?other=1', saved: null, cloudAcknowledged: false })).toBe('mock');
+    expect(resolvePreset({ search: '', saved: null, cloudAcknowledged: true })).toBe('cloud');
+    expect(resolvePreset({ search: '?other=1', saved: null, cloudAcknowledged: true })).toBe('cloud');
   });
 
   it('holds cloud only when the confirmation was explicitly cleared', () => {
     expect(resolvePreset({ search: '?preset=cloud', saved: 'local', cloudAcknowledged: false })).toBe('mock');
     expect(resolvePreset({ search: '?preset=cloud', saved: 'local', cloudAcknowledged: true })).toBe('cloud');
+    expect(resolvePreset({ search: '', saved: null, cloudAcknowledged: false })).toBe('mock');
   });
 
   it('treats a missing confirmation as already ticked', () => {

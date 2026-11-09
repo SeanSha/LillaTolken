@@ -29,7 +29,7 @@ npm run dev          # backend (127.0.0.1:8787) and frontend (https://localhost:
 The **mock** preset works with no key at all. It is fully offline and the results are predictable.
 
 - For a quick desktop try: `HTTPS=off npm run dev`, then open <http://localhost:5173> (`localhost` is itself a secure context, so the microphone is available).
-- The gear at the top right opens the developer panel: pick a Mock scenario, switch the preset, export CSV.
+- Add `/developer/` to the address to open the developer panel: pick a Mock scenario, switch the preset, export CSV. The child home screen has no control for this.
 - Start from Home with 🇨🇳🎤➜🇸🇪 or 🇸🇪🎤➜🇨🇳. The Mock preset uses a **scripted microphone** by default. You do not speak. Press ⏹ and the "heard" text comes from the selected scenario script.
 
 ### Common commands
@@ -75,7 +75,7 @@ OPENAI_API_KEY=sk-...
 npm run check:cloud
 ```
 
-It runs TTS (Chinese) → ASR (Chinese) → interpret → translate (Chinese→Swedish) → TTS (Swedish) → ASR (Swedish) → translate (Swedish→Chinese), all on synthetic text, and prints the time for each step. With no key it prints `SKIPPED` and exits with code 2 (**that is not a pass**). Then tick the "adult / synthetic speech only" statement in the gear panel and select the `cloud` preset.
+It runs TTS (Chinese) → ASR (Chinese) → interpret → translate (Chinese→Swedish) → TTS (Swedish) → ASR (Swedish) → translate (Swedish→Chinese), all on synthetic text, and prints the time for each step. With no key it prints `SKIPPED` and exits with code 2 (**that is not a pass**). Then open `/developer/`, tick the "adult / synthetic speech only" statement, and select the `cloud` preset.
 
 > ⚠️ **Privacy:** the Cloud preset sends recordings to OpenAI. Use **adult or synthetic speech only**. Do not let a real child use it, and do not say personal information. OpenAI data-retention settings cannot be guaranteed from code. Confirm them on the account.
 
@@ -101,10 +101,10 @@ iPhone Safari exposes the microphone only in a **secure context (HTTPS)**.
 
 **What to check:**
 
-1. In the gear panel, confirm `Secure context: true` and `getUserMedia + MediaRecorder: true`, and note `Recorder MIME` (on iPhone this is usually `audio/mp4`).
+1. Open `/developer/` and confirm `Secure context: true` and `getUserMedia + MediaRecorder: true`, and note `Recorder MIME` (on iPhone this is usually `audio/mp4`).
 2. The first tap on a Home button asks for the microphone. Choose Allow. If it was denied: *Settings → Safari → Microphone*.
 3. Turn off the mute switch and raise the volume (prompts and translations are sound). **The first tap** unlocks iOS audio playback. If it still does not play by itself, the 🔊 button is always there.
-4. **Real microphone + scripted text** (check permission, MIME, and segments, without spending money): gear → *Microphone (mock preset)* → `real mic + scripted text`, still on the mock preset.
+4. **Real microphone + scripted text** (check permission, MIME, and segments, without spending money): open `/developer/` → *Microphone (mock preset)* → `real mic + scripted text`, still on the mock preset.
 5. **The real AI path:** after the key is set, choose the `cloud` preset and speak T01–T14 as an adult.
 
 ## 3a. Local mode (ASR + LLM + TTS on the Mac)
@@ -131,7 +131,7 @@ npm run local:doctor                 # check hardware, tools, models, and voices
 ```bash
 npm run local:start                  # terminal A: whisper-server on 127.0.0.1:8080, leave it running
 npm run local:smoke                  # terminal B: synthetic-speech smoke test (no microphone)
-npm run dev                          # then choose the local preset in the gear panel
+npm run dev                          # then choose the local preset at /developer/
 ```
 
 The first request makes Ollama load the model into memory (about 8 seconds measured here). That time is stored as `modelLoadMs` and is not counted as inference. `OLLAMA_KEEP_ALIVE=30m` keeps later requests warm.
@@ -154,7 +154,7 @@ The engine ports on this Mac should not be reachable by other devices on the sam
 ### Testing local mode on an iPhone (an **adult must speak for real**)
 
 1. Finish the install above. Run `npm run local:start` and `npm run dev` (trusted mkcert certificate: section 3).
-2. On iPhone Safari open `https://<Mac LAN IP>:5173/`. In the gear panel, tick the "adult / synthetic speech only" statement and select **local**.
+2. On iPhone Safari open `https://<Mac LAN IP>:5173/developer/`. Tick the "adult / synthetic speech only" statement and select **local**.
 3. On the Mac, confirm `npm run local:doctor` prints `LOCAL_READY` (the health panel on the `/monitor` overview also shows the local engines).
 4. An **adult** speaks the list below, one item at a time, while `/monitor` is open on the Mac:
    - **L02** Chinese→Swedish: say `我想去厕所。`. The confirm screen should appear → ✅ → Swedish text, and the Swedish speech should be **audible**.
@@ -175,7 +175,7 @@ Open `https://localhost:5173/monitor` (on a phone, `https://<IP>:5173/monitor`).
 - Login uses an HttpOnly + SameSite=Strict cookie. Five failures in a row from the same client lock that client for 60 seconds. A write from another origin is rejected.
 - With `MONITOR_LOCAL_ONLY=on`, only this Mac can open the dashboard.
 
-**Protected routes** (401 until login): `/api/monitor/*`, `/api/local/health`, `/api/events/export`, `DELETE /api/events`, `DELETE /api/monitor/data`. *Download events CSV* in the gear panel therefore also requires a `/monitor` login first.
+**Protected routes** (401 until login): `/api/monitor/*`, `/api/local/health`, `/api/events/export`, `DELETE /api/events`, `DELETE /api/monitor/data`. *Download events CSV* in the `/developer/` panel therefore also requires a `/monitor` login first.
 
 **What is stored:** one metadata row per model call — stage, preset, model tag, duration, retry link, status / error code, token usage, cost, and the basis of that cost. **Never** audio, recognized text, clarification text, translation text, prompts, or personal data (automated tests check the database, the CSV, and every JSON route with sentinel strings). The database is `apps/server/data/telemetry.sqlite` (gitignored).
 
@@ -212,7 +212,7 @@ Double-click **小翻译**. It opens Terminal → starts Ollama if needed → st
    tailscale serve status        # print the address
    ```
    (The flags differ slightly by Tailscale version. Use `tailscale serve --help`.)
-4. On the iPhone, **turn Wi-Fi off and use cellular only**, confirm Tailscale is connected, then open the address below. The certificate is actually trusted, so **the iPhone does not need the mkcert certificate**, and the microphone permission works. The mode is in the address, so a refresh does not fall back to mock. Changing it once in the gear panel is also remembered on that phone.
+4. On the iPhone, **turn Wi-Fi off and use cellular only**, confirm Tailscale is connected, then open the address below. The certificate is actually trusted, so **the iPhone does not need the mkcert certificate**, and the microphone permission works. The mode is in the address, so a refresh does not fall back to mock. Changing it once at `/developer/` is also remembered on that phone.
    - Local: `https://<machine-name>.ts.net/?preset=local`
    - Cloud: `https://<machine-name>.ts.net/?preset=cloud` (the "adult / synthetic speech only" box is ticked by default)
 5. If Vite reports *Blocked request. This host is not allowed*: `*.ts.net` is allowed by default. For another name, use `ALLOWED_HOSTS=name npm run dev`.
@@ -262,7 +262,7 @@ Photo Vocabulary and Translation on the Cost tab are the two halves of the same 
 
 **Manual check in a desktop browser:** opening **My cards** widens the page so the grid can use more columns. The photo page stays at phone width. Long words wrap, and buttons do not cover the photo. The real iPhone checks in this section need to be walked through on a device. Desktop width can be checked by resizing the browser.
 
-## 4. Mock scenarios (gear → Mock scenario)
+## 4. Mock scenarios (`/developer/` → Mock scenario)
 
 | Scenario | Steps / expected |
 |---|---|
@@ -282,7 +282,7 @@ Each new task starts again from the first line of the selected scenario.
 
 The frontend sends **metadata-only** events to `POST /api/events`. The backend checks them with a strict schema. Any extra field (such as `transcript`) is rejected. **Not recorded:** audio, recognized text, translations, prompts, or the content of the "previous message".
 
-- Export: log in at `/monitor` first, then gear → *Download events CSV*, or `GET /api/events/export` (admin session required).
+- Export: log in at `/monitor` first, then `/developer/` → *Download events CSV*, or `GET /api/events/export` (admin session required).
 - Fields: `ts, sessionId, taskId, scenarioId, providerPreset, modelTag, version, direction, eventType, elapsedMs, segmentDurationMs, clarificationCount, stage, stageDurationMs, errorCategory, deliveryMode`.
 - Also appended to `apps/server/data/events.ndjson` (gitignored; turn off with `PERSIST_EVENTS=off`).
 - Besides the event names in the design document, `INTERPRETATION_READY` and `TTS_READY` were added so interpretation and TTS latency can be measured.

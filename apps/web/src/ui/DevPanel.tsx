@@ -28,17 +28,22 @@ export function DevPanel({ snap, send, onClose }: Props) {
     send({ type: 'SET_PRESET', preset: next });
     rememberPreset(next);
   };
+  const returnHome = () => {
+    rememberPreset(preset);
+    onClose();
+  };
   const cloudLinkWaiting = parsePreset(new URLSearchParams(window.location.search).get('preset')) === 'cloud' && !s.cloudAcknowledged;
 
   return (
     <div className="dev-panel" role="dialog" aria-label="Developer settings">
       <div className="dev-header">
         <strong>⚙ Developer / 开发者设置</strong>
-        <button type="button" className="dev-close" onClick={onClose} aria-label="Close">
+        <button type="button" className="dev-close" onClick={returnHome} aria-label="Back to home">
           ✖
         </button>
       </div>
 
+      <div className="dev-scroll">
       <section>
         <h3>Provider preset {idle ? '' : '(locked: task running)'}</h3>
         {(['mock', 'cloud', 'local'] as const).map((p) => {
@@ -62,7 +67,7 @@ export function DevPanel({ snap, send, onClose }: Props) {
             </label>
           );
         })}
-        <p className="hint">选择会留在这台设备上，刷新后仍然有效。固定地址：在网址后加 ?preset=local 或 ?preset=cloud。</p>
+        <p className="hint">选好后点下方「返回首页」。这个模式会留在这台手机上，刷新后仍然有效。</p>
         {cloudLinkWaiting && <p className="hint">这个地址固定为 cloud。勾选下面的确认后就会切过去，只需勾一次。</p>}
         <label className="check">
           <input
@@ -152,6 +157,13 @@ export function DevPanel({ snap, send, onClose }: Props) {
           <li>Server: {health ? `ok · v${health.version} · prompt-memory ${health.promptMemory ? 'on' : 'off'}` : 'NOT reachable'}</li>
         </ul>
       </section>
+      </div>
+
+      <div className="dev-return">
+        <button type="button" className="dev-return-btn" data-testid="dev-home" onClick={returnHome}>
+          返回首页
+        </button>
+      </div>
     </div>
   );
 }

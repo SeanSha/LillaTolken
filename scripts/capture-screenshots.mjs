@@ -46,7 +46,9 @@ async function shot(page, name) {
 }
 
 async function selectScenario(page, id) {
-  await clickTestId(page, 'open-dev');
+  const current = new URL(page.url());
+  current.pathname = '/developer/';
+  await page.goto(current.toString(), { waitUntil: 'networkidle0' });
   await page.waitForSelector('[data-testid="scenario-select"]', { visible: true });
   await page.select('[data-testid="scenario-select"]', id);
   await page.click('.dev-close');

@@ -23,19 +23,25 @@ import {
   SwitchScreen,
 } from './screens';
 
+/** Adult settings live only at /developer or /developer/. The child home has no control that opens them. */
+export function isDeveloperRoute(pathname: string): boolean {
+  return pathname === '/developer' || pathname === '/developer/';
+}
+
+function leaveDeveloperRoute(): void {
+  if (!isDeveloperRoute(window.location.pathname)) return;
+  history.replaceState(null, '', `/${window.location.search}${window.location.hash}`);
+}
+
 export function App() {
   const [presetAtStart] = useState(startingPreset);
   const [snap, send] = useActor(dialogueMachine, { input: { preset: presetAtStart } });
-  // A cloud bookmark still needs the adult confirmation the first time; open settings so that box is visible.
   const [feature, setFeature] = useState<null | 'photo' | 'library'>(null);
   const [openingFile, setOpeningFile] = useState<File | null>(null);
   const [photoKey, setPhotoKey] = useState(0);
   const homeCameraRef = useRef<HTMLInputElement>(null);
   const homeCamera = fileInputProps('camera');
-  const [devOpen, setDevOpen] = useState(() => {
-    const requested = new URLSearchParams(window.location.search).get('preset');
-    return requested === 'cloud' && !settings.get().cloudAcknowledged;
-  });
+  const [devOpen, setDevOpen] = useState(() => isDeveloperRoute(window.location.pathname));
   const screen: Screen = screenOf(snap);
   const task = snap.context.task;
   const taskActive = task !== null && screen !== 'switch';
@@ -51,11 +57,19 @@ export function App() {
     const flush = () => void logger.flush();
     window.addEventListener('pagehide', flush);
     const stopProbe = startRttProbe();
+    const syncDeveloper = () => setDevOpen(isDeveloperRoute(window.location.pathname));
+    window.addEventListener('popstate', syncDeveloper);
     return () => {
       window.removeEventListener('pagehide', flush);
+      window.removeEventListener('popstate', syncDeveloper);
       stopProbe();
     };
   }, [presetAtStart]);
+
+  const closeDeveloper = () => {
+    leaveDeveloperRoute();
+    setDevOpen(false);
+  };
 
   const props = { snap, send };
 
@@ -95,9 +109,6 @@ export function App() {
             onClick={() => task && send({ type: 'SWITCH_REQUESTED', direction: otherDirection(task.direction) })}
           >
             ⇄
-          </button>
-          <button type="button" className="settings" data-testid="open-dev" aria-label="Developer settings" onClick={() => setDevOpen(true)}>
-            ⚙
           </button>
         </div>
       </header>
@@ -140,7 +151,7 @@ export function App() {
           setFeature('photo');
         }}
       />
-      {devOpen && <DevPanel snap={snap} send={send} onClose={() => setDevOpen(false)} />}
+      {devOpen && <DevPanel snap={snap} send={send} onClose={closeDeveloper} />}
     </div>
   );
 }
